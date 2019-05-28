@@ -7,9 +7,9 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.Json;
 using Microsoft.Extensions.DependencyInjection;
-using csharpi.Services;
+using SevenThree.Services;
 
-namespace csharpi
+namespace SevenThree
 {
     class Program
     {
@@ -76,7 +76,7 @@ namespace csharpi
         {
             // this returns a ServiceProvider that is used later to call for those services
             // we can add types we have access to here, hence adding the new using statement:
-            // using csharpi.Services;
+            // using SevenThree.Services;
             // the config we build is also added, which comes in handy for setting the command prefix!
             return new ServiceCollection()
                 .AddSingleton(_config)
