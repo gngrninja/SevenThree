@@ -7,7 +7,7 @@ using Discord.Commands;
 using Discord.WebSocket;
 using Microsoft.Extensions.Configuration;
 
-namespace csharpi.Services
+namespace SevenThree.Services
 {
     public class CommandHandler
     {
