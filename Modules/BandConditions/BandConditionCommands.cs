@@ -28,10 +28,12 @@ namespace SevenThree.Modules.BandConditions
         {
             var embed = new EmbedBuilder();
             embed.Title = "Current ham radio conditions";
+            /* 
             embed.Footer = new EmbedFooterBuilder
             {
                 Text = "Data gathered from [HamQsl](https://www.hamqsl.com)"
             };
+            */
             embed.Description = "Data gathered from [HamQsl](https://www.hamqsl.com)";
             embed.ImageUrl = _config["HamQslUrl"];
             await ReplyAsync(null, false, embed.Build());        
