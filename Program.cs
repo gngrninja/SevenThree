@@ -8,6 +8,11 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.Json;
 using Microsoft.Extensions.DependencyInjection;
 using SevenThree.Services;
+using Serilog;
+using Serilog.Sinks.File;
+using Serilog.Sinks.SystemConsole;
+using Microsoft.Extensions.Logging;
+using System.Linq;
 
 namespace SevenThree
 {
@@ -16,9 +21,18 @@ namespace SevenThree
         // setup our fields we assign later
         private readonly IConfiguration _config;
         private DiscordSocketClient _client;
+        private static string _logLevel;
 
-        static void Main(string[] args)
+        static void Main(string[] args = null)
         {
+            if (args.Count() != 0)
+            {
+                _logLevel = args[0];
+            }
+            Log.Logger = new LoggerConfiguration()
+                .WriteTo.File("logs/svnthree.log", rollingInterval: RollingInterval.Day)
+                .WriteTo.Console()
+                .CreateLogger();
             new Program().MainAsync().GetAwaiter().GetResult();
         }
 
@@ -38,15 +52,14 @@ namespace SevenThree
             // call ConfigureServices to create the ServiceCollection/Provider for passing around the services
             using (var services = ConfigureServices())
             {
-                // get the client and assign to client 
                 // you get the services via GetRequiredService<T>
+
+                // get the logging service
+                services.GetRequiredService<LoggingService>();
+
+                // get the client service so we can start the bot up
                 var client = services.GetRequiredService<DiscordSocketClient>();
                 _client = client;
-
-                // setup logging and the ready event
-                client.Log += LogAsync;
-                client.Ready += ReadyAsync;
-                services.GetRequiredService<CommandService>().Log += LogAsync;
 
                 // this is where we get the Token value from the configuration file, and start the bot
                 await client.LoginAsync(TokenType.Bot, _config["Token"]);
@@ -59,18 +72,6 @@ namespace SevenThree
             }
         }
 
-        private Task LogAsync(LogMessage log)
-        {
-            Console.WriteLine(log.ToString());
-            return Task.CompletedTask;
-        }
-
-        private Task ReadyAsync()
-        {
-            Console.WriteLine($"Connected as -> [{_client.CurrentUser}] :)");
-            return Task.CompletedTask;
-        }
-
         // this method handles the ServiceCollection creation/configuration, and builds out the service provider we can call on later
         private ServiceProvider ConfigureServices()
         {
@@ -78,12 +79,48 @@ namespace SevenThree
             // we can add types we have access to here, hence adding the new using statement:
             // using SevenThree.Services;
             // the config we build is also added, which comes in handy for setting the command prefix!
-            return new ServiceCollection()
+            var services = new ServiceCollection()
+                .AddSingleton<LoggingService>()
                 .AddSingleton(_config)
                 .AddSingleton<DiscordSocketClient>()
+                .AddLogging(configure => configure.AddSerilog())
                 .AddSingleton<CommandService>()
-                .AddSingleton<CommandHandler>()
-                .BuildServiceProvider();
+                .AddSingleton<CommandHandler>();
+ 
+            if (!string.IsNullOrEmpty(_logLevel))            
+            {
+                switch (_logLevel.ToLower())
+                {
+                    case "info":
+                    {
+                        services.Configure<LoggerFilterOptions>(options => options.MinLevel = LogLevel.Information);
+                        break;
+                    }
+                    case "error":
+                    {
+                        services.Configure<LoggerFilterOptions>(options => options.MinLevel = LogLevel.Error);
+                        break;
+                    }  
+                    case "debug":
+                    {
+                        services.Configure<LoggerFilterOptions>(options => options.MinLevel = LogLevel.Debug);
+                        break;
+                    }                     
+                    default: 
+                    {
+                        services.Configure<LoggerFilterOptions>(options => options.MinLevel = LogLevel.Error);
+                        break;
+                    }
+                }
+                
+            }
+            else
+            {
+                services.Configure<LoggerFilterOptions>(options => options.MinLevel = LogLevel.Information);
+            }
+            var serviceProvider = services.BuildServiceProvider();
+
+            return serviceProvider;
         }
     }
 }

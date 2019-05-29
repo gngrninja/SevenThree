@@ -6,6 +6,7 @@ using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace SevenThree.Services
 {
@@ -16,7 +17,7 @@ namespace SevenThree.Services
         private readonly CommandService _commands;
         private readonly DiscordSocketClient _client;
         private readonly IServiceProvider _services;
-
+        private readonly ILogger _logger;
         public CommandHandler(IServiceProvider services)
         {
             // juice up the fields with these services
@@ -24,6 +25,8 @@ namespace SevenThree.Services
             _config = services.GetRequiredService<IConfiguration>();
             _commands = services.GetRequiredService<CommandService>();
             _client = services.GetRequiredService<DiscordSocketClient>();
+            _logger = services.GetService<ILogger<CommandHandler>>();
+
             _services = services;
             
             // take action when we execute a command
@@ -73,24 +76,32 @@ namespace SevenThree.Services
 
         public async Task CommandExecutedAsync(Optional<CommandInfo> command, ICommandContext context, IResult result)
         {
+            
+            if (result.IsSuccess) 
+            {
+                string logText = string.Empty;
+                if (context.Channel is IGuildChannel)
+                {
+                    logText = $"User: [{context.User.Username}] Discord Server: [{context.Guild.Name}] -> [{context.Message.Content}]";
+                
+                }
+                else
+                {
+                    logText = $"User: [{context.User.Username}] -> [{context.Message.Content}]";
+                }
+                _logger.LogInformation(logText);
+                return;
+            }
+            
             // if a command isn't found, log that info to console and exit this method
             if (!command.IsSpecified)
             {
-                System.Console.WriteLine($"Command failed to execute for [{context.User.Username}] <-> [{result.ErrorReason}]!");
+                _logger.LogInformation($"Command [{context.Message.Content}] failed to execute for [{context.User.Username}] <-> [{result.ErrorReason}]!");
                 return;
             }
                 
-
-            // log success to the console and exit this method
-            if (result.IsSuccess)
-            {
-                System.Console.WriteLine($"Command [{command.Value.Name}] executed for -> [{context.User.Username}]");
-                return;
-            }
-                
-
             // failure scenario, let's let the user know
-            await context.Channel.SendMessageAsync($"Sorry, {context.User.Username}... something went wrong -> [{result}]!");
-        }        
+            await context.Channel.SendMessageAsync($"Sorry, {context.User.Mention}... something went wrong -> [{result}]!");
+        }   
     }
 }

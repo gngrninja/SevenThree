@@ -26,7 +26,7 @@ namespace SevenThree.Modules.BandConditions
             _hamQslUrl = _config["HamQslUrl"];
         }
 
-        public async Task<string> GetConditionsHamQsl()
+        public string GetConditionsHamQsl()
         {
             using (WebClient client = new WebClient()) 
             {
