@@ -14,10 +14,12 @@ using Serilog.Sinks.SystemConsole;
 using Microsoft.Extensions.Logging;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
+using SevenThree.Database;
+using Microsoft.EntityFrameworkCore.Design;
 
 namespace SevenThree
 {
-    class Program
+    class Program 
     {
         // setup our fields we assign later
         private readonly IConfiguration _config;
@@ -55,6 +57,18 @@ namespace SevenThree
             {
                 // you get the services via GetRequiredService<T>
 
+                // get the database service
+                var context = services.GetRequiredService<SevenThreeContext>();
+                using (var db = context)
+                {
+                    db.CallSignAssociation.Add(new CallSignAssociation
+                    {
+                        DiscordUserId = 12345,
+                        DiscordUserName = "Ginja#1234",
+                        CallSign = "KF7IGN"
+                    });
+                    db.SaveChanges();
+                }
                 // get the logging service
                 services.GetRequiredService<LoggingService>();
 
@@ -80,14 +94,17 @@ namespace SevenThree
             // we can add types we have access to here, hence adding the new using statement:
             // using SevenThree.Services;
             // the config we build is also added, which comes in handy for setting the command prefix!
+
             var services = new ServiceCollection()
                 .AddSingleton<LoggingService>()
                 .AddSingleton(_config)
                 .AddSingleton<DiscordSocketClient>()
                 .AddLogging(configure => configure.AddSerilog())
-                .AddSingleton<CommandService>()                
+                .AddSingleton<CommandService>()
+                .AddDbContext<SevenThreeContext>(
+                    options => options.UseSqlite($"Data Source={_config["Db"]}"))             
                 .AddSingleton<CommandHandler>();
- 
+            
             if (!string.IsNullOrEmpty(_logLevel))            
             {
                 switch (_logLevel.ToLower())
