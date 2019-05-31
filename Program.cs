@@ -13,6 +13,7 @@ using Serilog.Sinks.File;
 using Serilog.Sinks.SystemConsole;
 using Microsoft.Extensions.Logging;
 using System.Linq;
+using Microsoft.EntityFrameworkCore;
 
 namespace SevenThree
 {
@@ -84,7 +85,7 @@ namespace SevenThree
                 .AddSingleton(_config)
                 .AddSingleton<DiscordSocketClient>()
                 .AddLogging(configure => configure.AddSerilog())
-                .AddSingleton<CommandService>()
+                .AddSingleton<CommandService>()                
                 .AddSingleton<CommandHandler>();
  
             if (!string.IsNullOrEmpty(_logLevel))            
