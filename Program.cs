@@ -57,18 +57,6 @@ namespace SevenThree
             {
                 // you get the services via GetRequiredService<T>
 
-                // get the database service
-                var context = services.GetRequiredService<SevenThreeContext>();
-                using (var db = context)
-                {
-                    db.CallSignAssociation.Add(new CallSignAssociation
-                    {
-                        DiscordUserId = 12345,
-                        DiscordUserName = "Ginja#1234",
-                        CallSign = "KF7IGN"
-                    });
-                    db.SaveChanges();
-                }
                 // get the logging service
                 services.GetRequiredService<LoggingService>();
 
@@ -101,10 +89,10 @@ namespace SevenThree
                 .AddSingleton<DiscordSocketClient>()
                 .AddLogging(configure => configure.AddSerilog())
                 .AddSingleton<CommandService>()
-                .AddDbContext<SevenThreeContext>(
-                    options => options.UseSqlite($"Data Source={_config["Db"]}"))             
+                .AddDbContext<SevenThreeContext>()         
                 .AddSingleton<CommandHandler>();
             
+        
             if (!string.IsNullOrEmpty(_logLevel))            
             {
                 switch (_logLevel.ToLower())
