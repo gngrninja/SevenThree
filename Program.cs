@@ -54,10 +54,10 @@ namespace SevenThree
 
         public async Task MainAsync()
         {
-            var ser = new XmlSerializer();
-            string path = Directory.GetCurrentDirectory() + @"/sample.xml";
-            var xmlInputData = File.ReadAllText(path);
-            var thing = ser.Deserialize<QrzApi>(xmlInputData);
+            //var ser = new XmlSerializer();
+            //string path = Directory.GetCurrentDirectory() + @"/sample.xml";
+            //var xmlInputData = File.ReadAllText(path);
+            //var thing = ser.Deserialize<QrzApi>(xmlInputData);
             // call ConfigureServices to create the ServiceCollection/Provider for passing around the services
             using (var services = ConfigureServices())
             {
