@@ -18,6 +18,7 @@ using SevenThree.Database;
 using Microsoft.EntityFrameworkCore.Design;
 using System.IO;
 using SevenThree.Models;
+using System.Xml;
 
 namespace SevenThree
 {
@@ -59,6 +60,9 @@ namespace SevenThree
             //var xmlInputData = File.ReadAllText(path);
             //var thing = ser.Deserialize<QrzApi>(xmlInputData);
             // call ConfigureServices to create the ServiceCollection/Provider for passing around the services
+            var xmlDoc = new XmlDocument();
+            xmlDoc.Load("sample.xml");
+            
             using (var services = ConfigureServices())
             {
                 // you get the services via GetRequiredService<T>

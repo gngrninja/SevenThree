@@ -5,6 +5,7 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace SevenThree.Services
 {
@@ -14,11 +15,11 @@ namespace SevenThree.Services
         private readonly DiscordSocketClient _discord;
         private readonly CommandService _commands;
         
-        public LoggingService(ILogger<LoggingService> logger, DiscordSocketClient discord, CommandService commands)
+        public LoggingService(IServiceProvider services)
         {            
-            _discord  = discord;
-            _commands = commands;
-            _logger   = logger;
+            _discord  = services.GetRequiredService<DiscordSocketClient>();
+            _commands = services.GetRequiredService<CommandService>();
+            _logger   = services.GetService<ILogger<LoggingService>>();
             
             _discord.Ready += OnReadyAsync;
             _discord.Log += OnLogAsync;
