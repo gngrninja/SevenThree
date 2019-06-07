@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 namespace SevenThree.Models
 {
-	public class QrzApi
+	public class QrzApiXml
 	{
 		[XmlRoot(ElementName="Callsign")]
 		public class Callsign {

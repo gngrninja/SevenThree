@@ -30,6 +30,7 @@ namespace SevenThree
         private readonly IConfiguration _config;
         private DiscordSocketClient _client;
         private static string _logLevel;
+        private QrzApiXml.QRZDatabase _qrzApi;
 
         static void Main(string[] args = null)
         {
@@ -57,24 +58,14 @@ namespace SevenThree
 
         public async Task MainAsync()
         {
-            //var ser = new XmlSerializer();
-            //string path = Directory.GetCurrentDirectory() + @"/sample.xml";
-            //var xmlInputData = File.ReadAllText(path);
-            //var thing = ser.Deserialize<QrzApi>(xmlInputData);
             // call ConfigureServices to create the ServiceCollection/Provider for passing around the services
-            var xmlDoc = new XmlDocument();
-            xmlDoc.Load("sample.xml");
-            var ser = new XmlSerializer(typeof(QrzApi));
-            var qrzResult = new QrzApi();
-            //var lines = System.IO.File.ReadAllLines("sample.xml");
-            using (var sr = new StringReader(xmlDoc.ToString()))
-            {   
-                qrzResult = (QrzApi)ser.Deserialize(sr);
-            }
             using (var services = ConfigureServices())
             {
                 // you get the services via GetRequiredService<T>
-
+                using (var sr = new StreamReader(new FileStream("sample2.xml", FileMode.Open, FileAccess.Read)))
+                {
+                    _qrzApi = new XmlServices().GetQrzResultFromString(sr);
+                }  
                 // get the logging service
                 services.GetRequiredService<LoggingService>();
 
