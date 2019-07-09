@@ -7,7 +7,10 @@ using System.Net.Http.Headers;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using System.Net;
-
+using SevenThree.Models;
+using SevenThree.Services;
+using System.Text;
+using System.IO;
 
 namespace SevenThree.Modules
 {
@@ -19,6 +22,9 @@ namespace SevenThree.Modules
         private string _sessionCheckUrl;
         private string _userName;
         private string _password;
+        private XmlServices _xmlService;
+        private QrzApiXml.QRZDatabase _qrzApi;
+        private string _apiKey;
 
         public QrzApi(IServiceProvider services)
         {
@@ -30,7 +36,8 @@ namespace SevenThree.Modules
             System.Console.WriteLine("pass");
             _password = Console.ReadLine();
             _logger = services.GetRequiredService<ILogger<QrzApi>>();
-            this.GetKey();
+            _xmlService = services.GetRequiredService<XmlServices>();
+            _apiKey = this.GetKey().Result;
         }
 
         public async Task<String> GetKey()
@@ -42,8 +49,26 @@ namespace SevenThree.Modules
                 var response = client.GetAsync(fullUrl).Result;
                 result = response.Content.ReadAsStringAsync().Result;
             }
-            System.Console.WriteLine($"{result}");
-            return result;
+            _logger.LogInformation($"{result}");
+            var byteArray = Encoding.UTF8.GetBytes(result);
+            using (var sr = new StreamReader(new MemoryStream(byteArray)))
+            {
+                _qrzApi = new XmlServices().GetQrzResultFromString(sr);
+            }  
+
+            if(!string.IsNullOrEmpty(_qrzApi.Session.Key))
+            {
+                return _qrzApi.Session.Key;
+            } 
+            else 
+            {
+                if (!string.IsNullOrEmpty(_qrzApi.Session.Error))
+                {
+                    _logger.LogError($"(_qrzApi.Session.Error)");
+                    throw new Exception($"No key returned!");
+                }
+                throw new Exception("test");
+            }
         }
 
         public async Task<string> CheckSession(string url)

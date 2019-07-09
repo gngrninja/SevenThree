@@ -94,6 +94,7 @@ namespace SevenThree
                 .AddSingleton<DiscordSocketClient>()
                 .AddLogging(configure => configure.AddSerilog())
                 .AddSingleton<CommandService>()
+                .AddSingleton<XmlServices>()
                 .AddSingleton<QrzApi>()
                 .AddDbContext<SevenThreeContext>()         
                 .AddSingleton<CommandHandler>();

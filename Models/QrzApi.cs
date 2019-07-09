@@ -98,6 +98,8 @@ namespace SevenThree.Models
 			public string Key { get; set; }
 			[XmlElement(ElementName="Count")]
 			public string Count { get; set; }
+			[XmlElement(ElementName="Error")]
+			public string Error { get; set; }
 			[XmlElement(ElementName="SubExp")]
 			public string SubExp { get; set; }
 			[XmlElement(ElementName="GMTime")]
