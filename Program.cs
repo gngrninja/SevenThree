@@ -21,6 +21,7 @@ using SevenThree.Models;
 using System.Xml;
 using System.Xml.Serialization;
 using System.Text;
+using SevenThree.Modules;
 
 namespace SevenThree
 {
@@ -47,13 +48,8 @@ namespace SevenThree
 
         public Program()
         {
-            // create the configuration
-            var _builder = new ConfigurationBuilder()
-                .SetBasePath(AppContext.BaseDirectory)
-                .AddJsonFile(path: "config.json");  
-
             // build the configuration and assign to _config          
-            _config = _builder.Build();
+            _config = new ConfigService().ConfigureServices();
         }
 
         public async Task MainAsync()
@@ -79,7 +75,7 @@ namespace SevenThree
 
                 // we get the CommandHandler class here and call the InitializeAsync method to start things up for the CommandHandler service
                 await services.GetRequiredService<CommandHandler>().InitializeAsync();
-
+                services.GetRequiredService<QrzApi>();
                 await Task.Delay(-1);
             }
         }
@@ -98,6 +94,7 @@ namespace SevenThree
                 .AddSingleton<DiscordSocketClient>()
                 .AddLogging(configure => configure.AddSerilog())
                 .AddSingleton<CommandService>()
+                .AddSingleton<QrzApi>()
                 .AddDbContext<SevenThreeContext>()         
                 .AddSingleton<CommandHandler>();
             
