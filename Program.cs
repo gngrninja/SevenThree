@@ -95,6 +95,7 @@ namespace SevenThree
                 .AddLogging(configure => configure.AddSerilog())
                 .AddSingleton<CommandService>()
                 .AddSingleton<XmlServices>()
+                .AddSingleton<SecurityServices>()
                 .AddSingleton<QrzApi>()
                 .AddDbContext<SevenThreeContext>()         
                 .AddSingleton<CommandHandler>();

@@ -11,5 +11,6 @@ namespace SevenThree.Database
         public string CredName { get; set; }
         public string UserName { get; set;}
         public string CallSign { get; set; }
+        public string Password { get; set;}
     }
 }

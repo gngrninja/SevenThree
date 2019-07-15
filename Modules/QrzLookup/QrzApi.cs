@@ -25,19 +25,37 @@ namespace SevenThree.Modules
         private XmlServices _xmlService;
         private QrzApiXml.QRZDatabase _qrzApi;
         private string _apiKey;
+        private readonly SecurityServices _secure;
+        private readonly NetworkCredential _creds;
 
         public QrzApi(IServiceProvider services)
         {
             _config = services.GetRequiredService<IConfiguration>();
-            _baseUrl = "https://xmldata.qrz.com/xml/current";
-            _sessionCheckUrl = $"https://xmldata.qrz.com/xml/current/?s={_config["QrzApiKey"]};callsign=kf7ign";
-            System.Console.WriteLine("user");
-            _userName = Console.ReadLine();
-            System.Console.WriteLine("pass");
-            _password = Console.ReadLine();
+            _secure = services.GetRequiredService<SecurityServices>();
             _logger = services.GetRequiredService<ILogger<QrzApi>>();
             _xmlService = services.GetRequiredService<XmlServices>();
+                    
+            _baseUrl = "https://xmldata.qrz.com/xml/current";
+            System.Console.WriteLine("user");
+            _userName = Console.ReadLine();
+            System.Console.WriteLine("password");
+            while (true)
+            {
+                var key = System.Console.ReadKey(true);
+                if (key.Key == ConsoleKey.Enter)
+                {
+                    break;
+                }
+                _password += key.KeyChar;
+            }
+            _creds = _secure.ConvertToSecure(username: _userName, password: _password);
+
+            _password = null;
+            _userName = null;
+
+
             _apiKey = this.GetKey().Result;
+            _sessionCheckUrl = $"{_baseUrl}/?s={_apiKey};callsign=kf7ign";
         }
 
         public async Task<String> GetKey()
@@ -45,7 +63,7 @@ namespace SevenThree.Modules
             string result = string.Empty;
             using (var client = new HttpClient())
             {
-                var fullUrl = $"{_baseUrl}/?username={_userName};password={_password};agent=q5.0";
+                var fullUrl = $"{_baseUrl}/?username={_creds.UserName};password={_secure.ConvertFromSecure(_creds)};agent=q5.0";
                 var response = client.GetAsync(fullUrl).Result;
                 result = response.Content.ReadAsStringAsync().Result;
             }
@@ -67,14 +85,28 @@ namespace SevenThree.Modules
                     _logger.LogError($"(_qrzApi.Session.Error)");
                     throw new Exception($"No key returned!");
                 }
-                throw new Exception("test");
+                throw new Exception("qrz api error");
             }
         }
 
-        public async Task<string> CheckSession(string url)
+        public async Task<QrzApiXml.QRZDatabase> GetCallInfo(string callsign)
         {
             string result = string.Empty;
-            return result;
+            using (var client = new HttpClient())
+            {
+                var response = client.GetAsync($"{_baseUrl}/?s={_apiKey};callsign={callsign}").Result;
+                result = response.Content.ReadAsStringAsync().Result;
+            }
+
+            _logger.LogInformation(result);
+
+            var byteArray = Encoding.UTF8.GetBytes(result);
+            using (var sr = new StreamReader(new MemoryStream(byteArray)))
+            {
+                _qrzApi = new XmlServices().GetQrzResultFromString(sr);
+            }  
+
+            return _qrzApi;
         }
     }
 }

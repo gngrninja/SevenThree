@@ -7,6 +7,7 @@ namespace SevenThree.Database
     public class SevenThreeContext : DbContext
     {
         public DbSet<CallSignAssociation> CallSignAssociation { get; set; }
+        public DbSet<Credentials> Credentials { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
