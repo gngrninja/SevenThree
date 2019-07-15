@@ -57,11 +57,6 @@ namespace SevenThree
             // call ConfigureServices to create the ServiceCollection/Provider for passing around the services
             using (var services = ConfigureServices())
             {
-                // you get the services via GetRequiredService<T>
-                using (var sr = new StreamReader(new FileStream("sample2.xml", FileMode.Open, FileAccess.Read)))
-                {
-                    _qrzApi = new XmlServices().GetQrzResultFromString(sr);
-                }  
                 // get the logging service
                 services.GetRequiredService<LoggingService>();
 
