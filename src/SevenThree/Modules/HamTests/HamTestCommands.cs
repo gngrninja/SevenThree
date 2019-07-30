@@ -41,16 +41,28 @@ namespace SevenThree.Modules
 
             var embed = new EmbedBuilder();
 
-            embed.Title = $"Question for test {question.Test.TestName}!";            
+            embed.Title = $"Question [{question.QuestionSection}] from test: [{question.Test.TestName}]!";            
             embed.WithColor(new Color(0, 255, 0));
             
+            if (question.FccPart != null)
+            {
+                embed.AddField(new EmbedFieldBuilder{
+                    Name  = "FCC Part",
+                    Value = question.FccPart 
+                });
+            }
+
+            embed.AddField(new EmbedFieldBuilder{
+                Name  = $"Subelement [**{question.SubelementName}**]",
+                Value = question.SubelementDesc
+            });   
+
             embed.AddField(new EmbedFieldBuilder{
                 Name     = $"Question:",
                 Value    = question.QuestionText,
-                IsInline = false
-                
+                IsInline = false                
             });
-                                                       
+                             
             //associate answers with letters (randomly)
             var answerOptions = new List<Tuple<char, Answer>>();               
             var letters       = new List<char>(){'A','B','C','D'};
@@ -92,7 +104,6 @@ namespace SevenThree.Modules
             await ReplyAsync("",false,embed.Build());               
 
             bool answered = false;
-
             
             do 
             {
@@ -119,9 +130,7 @@ namespace SevenThree.Modules
                     }  
                 }              
             }
-            while (!answered);
-            
-
+            while (!answered);            
         }                
 
         [Command("import")]
