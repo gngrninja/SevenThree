@@ -13,7 +13,7 @@ using Microsoft.Extensions.Logging;
 
 namespace SevenThree.Modules
 {
-    public class QrzLookupCommands : ModuleBase
+    public class QrzLookupCommands 
     {
         private readonly QrzApi _qrzApi;
         private readonly ILogger _logger;
@@ -86,8 +86,8 @@ namespace SevenThree.Modules
             {
                 embed.ImageUrl = result.Callsign.Image;
             }
-            embed.ThumbnailUrl = Context.User.GetAvatarUrl();
-            await ReplyAsync(null, false, embed.Build()); 
+            //embed.ThumbnailUrl = Context.User.GetAvatarUrl();
+            //await ReplyAsync(null, false, embed.Build()); 
         }
     }
 }

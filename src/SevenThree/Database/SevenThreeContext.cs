@@ -8,6 +8,9 @@ namespace SevenThree.Database
     {
         public DbSet<CallSignAssociation> CallSignAssociation { get; set; }
         public DbSet<Credentials> Credentials { get; set; }
+        public DbSet<HamTest> HamTest { get; set; }
+        public DbSet<Questions> Questions { get; set; }
+        public DbSet<Answer> Answer { get; set ;}
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {

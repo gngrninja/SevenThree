@@ -1,8 +1,9 @@
-/bin
-/obj
+bin/
+obj/
 *.json
 .DS_Store
-/logs*
+logs/
 *.log*
-/Migrations
+Migrations/
 *.db
+xmlExamples/

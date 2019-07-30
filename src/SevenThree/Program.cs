@@ -70,7 +70,7 @@ namespace SevenThree
 
                 // we get the CommandHandler class here and call the InitializeAsync method to start things up for the CommandHandler service
                 await services.GetRequiredService<CommandHandler>().InitializeAsync();
-                services.GetRequiredService<QrzApi>();
+                //services.GetRequiredService<QrzApi>();
                 await Task.Delay(-1);
             }
         }
@@ -91,7 +91,7 @@ namespace SevenThree
                 .AddSingleton<CommandService>()
                 .AddSingleton<XmlServices>()
                 .AddSingleton<SecurityServices>()
-                .AddSingleton<QrzApi>()
+                //.AddSingleton<QrzApi>()
                 .AddDbContext<SevenThreeContext>()         
                 .AddSingleton<CommandHandler>();
             
