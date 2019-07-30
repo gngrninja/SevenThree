@@ -13,12 +13,13 @@ using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using SevenThree.Database;
 using SevenThree.Models;
+using Discord.Addons.Interactive;
 using System.IO;
 
 namespace SevenThree.Modules
 {
     // for commands to be available, and have the Context passed to them, we must inherit ModuleBase
-    public class HamTestCommands : ModuleBase
+    public class HamTestCommands : InteractiveBase
     {
         private readonly ILogger _logger;
         private readonly SevenThreeContext _db;
@@ -29,54 +30,98 @@ namespace SevenThree.Modules
             _db = services.GetRequiredService<SevenThreeContext>();
         }
 
-        [Command("question")]
+        [Command("question", RunMode = RunMode.Async)]
         public async Task QuestionCommand([Remainder]string args = null)
         {            
+            var random    = new Random();
             var questions = await _db.Questions.Include(q => q.Test).ToListAsync();
-            var question  = questions[100];
+            var question  = questions[random.Next(questions.Count())];
             var answers   = await _db.Answer.Where(a => a.Question.QuestionId == question.QuestionId).ToListAsync();
+            var sb        = new StringBuilder();
 
-            var sb = new StringBuilder();
-            sb.AppendLine($"questionId -> [{question.QuestionId}]");
-            sb.AppendLine($"questionText -> [{question.QuestionText}]");
+            var embed = new EmbedBuilder();
+
+            embed.Title = $"Question for test {question.Test.TestName}!";            
+            embed.WithColor(new Color(0, 255, 0));
             
-            sb.AppendLine($"TestId -> [{question.Test.TestId}]");
-            sb.AppendLine($"TestName -> [{question.Test.TestName}]");
-            sb.AppendLine($"TestName -> [{question.Test.TestDescription}]");
-
-            sb.AppendLine("Answers:");
-
+            embed.AddField(new EmbedFieldBuilder{
+                Name     = $"Question:",
+                Value    = question.QuestionText,
+                IsInline = false
+                
+            });
+                                                       
+            //associate answers with letters (randomly)
+            var answerOptions = new List<Tuple<char, Answer>>();               
+            var letters       = new List<char>(){'A','B','C','D'};
+            var usedNumbers   = new List<int>();
+            var usedLetters   = new List<char>();
+            
+            bool addingAnswers = true;
             int i = 0;
-            foreach (var answer in answers)
-            {
-                var prefix = "a";
-                switch (i)
+            while(addingAnswers) 
+            {                
+                var randAnswer = random.Next(answers.Count());
+                while (usedNumbers.Contains(randAnswer))
                 {
-                    case 0:
-                    {
-                        prefix = "a";
-                        break;
-                    }
-                    case 1:
-                    {
-                        prefix = "b";
-                        break;
-                    }
-                    case 2:
-                    {
-                        prefix = "c";
-                        break;
-                    }
-                    case 3:
-                    {
-                        prefix = "d";
-                        break;
-                    }
+                    randAnswer = random.Next(answers.Count());
                 }
-                sb.AppendLine($"{prefix} -> [{answer.AnswerText}]");
+                var answer = answers[randAnswer];
+                var letter = letters[i];
+
+                answerOptions.Add(Tuple.Create(letter, answer));
+                usedNumbers.Add(randAnswer);
+                if (answerOptions.Count() == answers.Count())
+                {                    
+                    addingAnswers = false;
+                }                
                 i++;
             }
-            await ReplyAsync(sb.ToString());
+
+            foreach (var answer in answerOptions)
+            {
+                var letter     = answer.Item1;
+                var answerData = answer.Item2;
+                embed.AddField(new EmbedFieldBuilder{
+                    Name     = $"{letter}.",
+                    Value    = answerData.AnswerText,
+                    IsInline = true
+                });                
+            }
+               
+            await ReplyAsync("",false,embed.Build());               
+
+            bool answered = false;
+
+            
+            do 
+            {
+                var response = await NextMessageAsync();
+                char? answerChar = null;
+                try 
+                {
+                    answerChar = char.Parse(response.Content.ToUpper());
+                }
+                catch(Exception ex)
+                {
+                    System.Console.WriteLine($"Error [{ex.Message}]!");
+                }
+                if (answerChar.HasValue)
+                {
+                    var possibleAnswer = answerOptions.Where(w => w.Item1 == answerChar).Select(w => w.Item2).FirstOrDefault();
+                    if (possibleAnswer.IsAnswer)
+                    {
+                        var answerText = new StringBuilder();
+                        answerText.AppendLine($"Congrats -> **[{response.Author.Mention}]** <-!");
+                        answerText.AppendLine($"You had the correct answer of [*{answerChar}*] -> [**{possibleAnswer.AnswerText}**]");
+                        await ReplyAsync(answerText.ToString());                    
+                        answered = true;
+                    }  
+                }              
+            }
+            while (!answered);
+            
+
         }                
 
         [Command("import")]
