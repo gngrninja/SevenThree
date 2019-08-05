@@ -15,6 +15,7 @@ namespace SevenThree.Database
         public string QuestionText { get; set; }
         public string QuestionSection { get; set; }
         public string FccPart { get; set; }
+        public string Subelement { get; set; }
         public string SubelementName { get; set; }
         public string SubelementDesc { get; set; }
     }

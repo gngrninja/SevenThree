@@ -11,6 +11,7 @@ namespace SevenThree.Database
         public DbSet<HamTest> HamTest { get; set; }
         public DbSet<Questions> Questions { get; set; }
         public DbSet<Answer> Answer { get; set ;}
+        public DbSet<Quiz> Quiz { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
