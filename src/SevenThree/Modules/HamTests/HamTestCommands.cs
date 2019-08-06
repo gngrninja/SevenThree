@@ -66,7 +66,7 @@ namespace SevenThree.Modules
                     guild: Context.Guild as IGuild,
                     questions: questions
                 ); 
-                await startQuiz.StartGame();
+                await startQuiz.StartGame().ConfigureAwait(false);
             }
             else if (quiz.IsActive)
             {
