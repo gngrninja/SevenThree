@@ -34,7 +34,8 @@ namespace SevenThree.Modules
 
         [Command("start", RunMode = RunMode.Async)]
         public async Task StartQuiz([Remainder]string args = null)
-        {                              
+        {                 
+                        
             ulong id;
 
             if (Context.Channel is IDMChannel)
@@ -57,7 +58,15 @@ namespace SevenThree.Modules
                     TimeStarted = DateTime.Now                    
                 });
                 await _db.SaveChangesAsync();
+                var questions = await _db.Questions.Include(q => q.Test).ToListAsync();
                 await ReplyAsync("Quiz is active!");
+                var startQuiz = new QuizUtil(
+                    channel: Context.Channel as ITextChannel, 
+                    services: _services,
+                    guild: Context.Guild as IGuild,
+                    questions: questions
+                ); 
+                await startQuiz.StartGame();
             }
             else if (quiz.IsActive)
             {
