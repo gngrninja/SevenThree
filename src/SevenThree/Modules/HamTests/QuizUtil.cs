@@ -29,6 +29,7 @@ namespace SevenThree.Modules
         private readonly IGuild _guild;
         private readonly ITextChannel _channel;
         private readonly List<Questions> _questions;
+        private readonly IUser _user;
 
         public bool ShouldStopTest { get; private set; }
         public Questions CurrentQuestion { get; private set; }
@@ -74,7 +75,8 @@ namespace SevenThree.Modules
             IGuild guild,
             ITextChannel channel,
             List<Questions> questions,
-            IServiceProvider services
+            IServiceProvider services,
+            ulong id
         )
         {
              _logger = services.GetRequiredService<ILogger<CallAssociation>>();
@@ -83,8 +85,27 @@ namespace SevenThree.Modules
 
              _guild = guild;
              _questions = questions;
-             _channel = channel;             
+             _channel = channel;  
+             _id = id;           
         }
+
+        public QuizUtil(
+            IGuild guild,
+            IUser user,
+            List<Questions> questions,
+            IServiceProvider services,
+            ulong id
+        )
+        {
+             _logger = services.GetRequiredService<ILogger<CallAssociation>>();
+             _client = services.GetRequiredService<DiscordSocketClient>();
+             _db = services.GetRequiredService<SevenThreeContext>();
+
+             _guild = guild;
+             _questions = questions;
+             _user = user;       
+             _id = id;   
+        }        
 
         public void SetServer(ulong discordServer)
         {
@@ -111,73 +132,12 @@ namespace SevenThree.Modules
                 CurrentQuestion = _questions[random.Next(_questions.Count)];
                 
                 try
-                {                                        
+                {
                     //make code for old CurrentQuestions
-                    var embed = new EmbedBuilder();
-
-                    embed.Title = $"CurrentQuestion [{CurrentQuestion.QuestionSection}] from test: [{CurrentQuestion.Test.TestName}]!";            
-                    embed.WithColor(new Color(0, 255, 0));
-                    
-                    if (CurrentQuestion.FccPart != null)
-                    {
-                        embed.AddField(new EmbedFieldBuilder{
-                            Name  = "FCC Part",
-                            Value = CurrentQuestion.FccPart 
-                        });
-                    }
-
-                    embed.AddField(new EmbedFieldBuilder{
-                        Name  = $"Subelement [**{CurrentQuestion.SubelementName}**]",
-                        Value = CurrentQuestion.SubelementDesc
-                    });   
-
-                    embed.AddField(new EmbedFieldBuilder{
-                        Name     = $"CurrentQuestion:",
-                        Value    = CurrentQuestion.QuestionText,
-                        IsInline = false                
-                    });
-                                    
-                    //associate answers with letters (randomly)
-                    var answerOptions = new List<Tuple<char, Answer>>();               
-                    var letters       = new List<char>(){'A','B','C','D'};
-                    var usedNumbers   = new List<int>();
-                    var usedLetters   = new List<char>();
-
-                    var answers = await _db.Answer.Where(a => a.Question.QuestionId == CurrentQuestion.QuestionId).ToListAsync();
-
-                    bool addingAnswers = true;
-                    int i = 0;
-                    while(addingAnswers) 
-                    {                
-                        var randAnswer = random.Next(answers.Count());
-                        while (usedNumbers.Contains(randAnswer))
-                        {
-                            randAnswer = random.Next(answers.Count());
-                        }
-                        var answer = answers[randAnswer];
-                        var letter = letters[i];
-
-                        answerOptions.Add(Tuple.Create(letter, answer));
-                        usedNumbers.Add(randAnswer);
-                        if (answerOptions.Count() == answers.Count())
-                        {                    
-                            addingAnswers = false;
-                        }                
-                        i++;
-                    }
-
-                    foreach (var answer in answerOptions)
-                    {
-                        var letter     = answer.Item1;
-                        var answerData = answer.Item2;
-                        embed.AddField(new EmbedFieldBuilder{
-                            Name     = $"{letter}.",
-                            Value    = answerData.AnswerText,
-                            IsInline = true
-                        });                
-                    }     
-                    Answers = answerOptions;
-                    await _channel.SendMessageAsync(null,false,embed.Build()); 
+                    var embed = GetQuestionEmbed();
+                    //associate answers with letters (randomly)                    
+                    await SetupAnswers(random, embed);                    
+                    await SendReplyAsync(embed);
                 }
                 catch (Exception ex)
                 {
@@ -190,11 +150,12 @@ namespace SevenThree.Modules
                     try
                     {
                         await Task.Delay(60000, _tokenSource.Token).ConfigureAwait(false);
-                        await Task.Delay(60000, _tokenSource.Token).ConfigureAwait(false);
+                        //await Task.Delay(60000, _tokenSource.Token).ConfigureAwait(false);
                     }        
                     catch (TaskCanceledException)
                     {
-
+                        //question as answered
+                        Thread.Sleep(5000);
                     }
                 }   
                 finally
@@ -208,6 +169,83 @@ namespace SevenThree.Modules
             }                                        
         }
 
+        private async Task SetupAnswers(Random random, EmbedBuilder embed)
+        {
+            var answerOptions = new List<Tuple<char, Answer>>();
+            var letters = new List<char>() { 'A', 'B', 'C', 'D' };
+            var usedNumbers = new List<int>();
+            var usedLetters = new List<char>();
+
+            var answers = await _db.Answer.Where(a => a.Question.QuestionId == CurrentQuestion.QuestionId).ToListAsync();
+
+            bool addingAnswers = true;
+            int i = 0;
+            while (addingAnswers)
+            {
+                var randAnswer = random.Next(answers.Count());
+                while (usedNumbers.Contains(randAnswer))
+                {
+                    randAnswer = random.Next(answers.Count());
+                }
+                var answer = answers[randAnswer];
+                var letter = letters[i];
+
+                answerOptions.Add(Tuple.Create(letter, answer));
+                usedNumbers.Add(randAnswer);
+                if (answerOptions.Count() == answers.Count())
+                {
+                    addingAnswers = false;
+                }
+                i++;
+            }
+
+            foreach (var answer in answerOptions)
+            {
+                var letter = answer.Item1;
+                var answerData = answer.Item2;
+                embed.AddField(new EmbedFieldBuilder
+                {
+                    Name = $"{letter}.",
+                    Value = answerData.AnswerText,
+                    IsInline = true
+                });
+            }
+
+            Answers = answerOptions;
+        }
+
+        private EmbedBuilder GetQuestionEmbed()
+        {
+            var embed = new EmbedBuilder();
+
+            embed.Title = $"Question: [{CurrentQuestion.QuestionSection}] From Test: [{CurrentQuestion.Test.TestName}]!";
+            embed.WithColor(new Color(0, 255, 0));
+
+            if (CurrentQuestion.FccPart != null)
+            {
+                embed.AddField(new EmbedFieldBuilder
+                {
+                    Name = "FCC Part",
+                    Value = CurrentQuestion.FccPart
+                });
+            }
+
+            embed.AddField(new EmbedFieldBuilder
+            {
+                Name = $"Subelement [**{CurrentQuestion.SubelementName}**]",
+                Value = CurrentQuestion.SubelementDesc
+            });
+
+            embed.AddField(new EmbedFieldBuilder
+            {
+                Name = $"Question:",
+                Value = CurrentQuestion.QuestionText,
+                IsInline = false
+            });
+
+            return embed;
+        }
+
         private Task PotentialAnswer(SocketMessage msg)
         {
             var _ = Task.Run(async () => 
@@ -218,10 +256,17 @@ namespace SevenThree.Modules
                     {
                         return;
                     }
-
-                    var userMsg = msg as SocketUserMessage;
-                    var txtChannel = msg?.Channel as ITextChannel;
-                    if (txtChannel == null || txtChannel.Guild != _guild)
+                    var txtChannel = msg?.Channel as ITextChannel;                                        
+                    var usrChannel = msg?.Channel as IDMChannel;
+                    if (txtChannel == null && usrChannel == null)
+                    {
+                        return;
+                    }
+                    if (txtChannel != null && txtChannel.Guild.Id != _id)
+                    {
+                        return;
+                    }
+                    if (usrChannel != null && msg.Author.Id != _id)
                     {
                         return;
                     }
@@ -239,7 +284,7 @@ namespace SevenThree.Modules
                                 var answerText = new StringBuilder();
                                 answerText.AppendLine($"Congrats -> **[{msg.Author.Mention}]** <-!");
                                 answerText.AppendLine($"You had the correct answer of [*{answerChar}*] -> [**{possibleAnswer.AnswerText}**]");
-                                await _channel.SendMessageAsync(answerText.ToString());                    
+                                await SendReplyAsync(answerText.ToString());                    
                                 answered = true;
                             }                              
                         }
@@ -262,16 +307,37 @@ namespace SevenThree.Modules
             return Task.CompletedTask;
         }
 
-        public async Task StartCurrentQuestionTimer()
+        private Task SendReplyAsync(string message)
         {
-            TokenSource = new CancellationTokenSource();
-            //var timerAction = new Action(_emailUtils.CheckEmails);
-            //await EmailCheckTimer(timerAction, TimeSpan.FromSeconds(60), TokenSource.Token);
+            var _ = Task.Run(async () => 
+            {
+                if (_channel != null)
+                {
+                    await _channel.SendMessageAsync(message);
+                }
+                else if (_user != null)
+                {
+                    await _user.SendMessageAsync(message);
+                } 
+            });
+            return Task.CompletedTask;
         }
 
-        private async Task StopCurrentQuestionTimer()
+        private Task SendReplyAsync(EmbedBuilder embed)
         {
-            TokenSource.Cancel();
+            var _ = Task.Run(async () => 
+            {
+                if (_channel != null)
+                {
+                    await _channel.SendMessageAsync(null, false, embed.Build());
+                }
+                else if (_user != null)
+                {
+                    await _user.SendMessageAsync(null, false, embed.Build());
+                } 
+            });
+            return Task.CompletedTask;
         }
+
     }
 }

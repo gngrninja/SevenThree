@@ -40,7 +40,7 @@ namespace SevenThree.Modules
 
             if (Context.Channel is IDMChannel)
             {
-                id = (ulong)Context.User.Id;                
+                id = Context.User.Id;
             }
             else
             {
@@ -60,125 +60,39 @@ namespace SevenThree.Modules
                 await _db.SaveChangesAsync();
                 var questions = await _db.Questions.Include(q => q.Test).ToListAsync();
                 await ReplyAsync("Quiz is active!");
-                var startQuiz = new QuizUtil(
-                    channel: Context.Channel as ITextChannel, 
-                    services: _services,
-                    guild: Context.Guild as IGuild,
-                    questions: questions
-                ); 
+                QuizUtil startQuiz = null;
+                if (Context.Channel is IDMChannel)
+                {
+                    startQuiz = new QuizUtil(
+                        user: Context.User as IUser, 
+                        services: _services,
+                        guild: Context.Guild as IGuild,
+                        questions: questions,
+                        id: id
+                    ); 
+                } 
+                else
+                {
+                    startQuiz = new QuizUtil(
+                        channel: Context.Channel as ITextChannel, 
+                        services: _services,
+                        guild: Context.Guild as IGuild,
+                        questions: questions,
+                        id: id
+                    ); 
+                }
                 await startQuiz.StartGame().ConfigureAwait(false);
             }
             else if (quiz.IsActive)
             {
                 await ReplyAsync("There is already an active quiz!");
-            }     
-            /*               
-            var random    = new Random();
-            var questions = await _db.Questions.Include(q => q.Test).ToListAsync();
-            var question  = questions[random.Next(questions.Count())];
-            var answers   = await _db.Answer.Where(a => a.Question.QuestionId == question.QuestionId).ToListAsync();
-            var sb        = new StringBuilder();
-
-            var embed = new EmbedBuilder();
-
-            embed.Title = $"Question [{question.QuestionSection}] from test: [{question.Test.TestName}]!";            
-            embed.WithColor(new Color(0, 255, 0));
-            
-            if (question.FccPart != null)
-            {
-                embed.AddField(new EmbedFieldBuilder{
-                    Name  = "FCC Part",
-                    Value = question.FccPart 
-                });
-            }
-
-            embed.AddField(new EmbedFieldBuilder{
-                Name  = $"Subelement [**{question.SubelementName}**]",
-                Value = question.SubelementDesc
-            });   
-
-            embed.AddField(new EmbedFieldBuilder{
-                Name     = $"Question:",
-                Value    = question.QuestionText,
-                IsInline = false                
-            });
-                             
-            //associate answers with letters (randomly)
-            var answerOptions = new List<Tuple<char, Answer>>();               
-            var letters       = new List<char>(){'A','B','C','D'};
-            var usedNumbers   = new List<int>();
-            var usedLetters   = new List<char>();
-            
-            bool addingAnswers = true;
-            int i = 0;
-            while(addingAnswers) 
-            {                
-                var randAnswer = random.Next(answers.Count());
-                while (usedNumbers.Contains(randAnswer))
-                {
-                    randAnswer = random.Next(answers.Count());
-                }
-                var answer = answers[randAnswer];
-                var letter = letters[i];
-
-                answerOptions.Add(Tuple.Create(letter, answer));
-                usedNumbers.Add(randAnswer);
-                if (answerOptions.Count() == answers.Count())
-                {                    
-                    addingAnswers = false;
-                }                
-                i++;
-            }
-
-            foreach (var answer in answerOptions)
-            {
-                var letter     = answer.Item1;
-                var answerData = answer.Item2;
-                embed.AddField(new EmbedFieldBuilder{
-                    Name     = $"{letter}.",
-                    Value    = answerData.AnswerText,
-                    IsInline = true
-                });                
-            }
-               
-            await ReplyAsync("",false,embed.Build());               
-
-            bool answered = false;
-            
-            do 
-            {
-                var response = await NextMessageAsync();
-                char? answerChar = null;
-                try 
-                {
-                    answerChar = char.Parse(response.Content.ToUpper());
-                }
-                catch(Exception ex)
-                {
-                    System.Console.WriteLine($"Error [{ex.Message}]!");
-                }
-                if (answerChar.HasValue)
-                {
-                    var possibleAnswer = answerOptions.Where(w => w.Item1 == answerChar).Select(w => w.Item2).FirstOrDefault();
-                    if (possibleAnswer.IsAnswer)
-                    {
-                        var answerText = new StringBuilder();
-                        answerText.AppendLine($"Congrats -> **[{response.Author.Mention}]** <-!");
-                        answerText.AppendLine($"You had the correct answer of [*{answerChar}*] -> [**{possibleAnswer.AnswerText}**]");
-                        await ReplyAsync(answerText.ToString());                    
-                        answered = true;
-                    }  
-                }              
-            }
-            while (!answered);    
-            */        
+            }          
         }          
 
         [Command("stop", RunMode = RunMode.Async)]
         public async Task StopQuiz([Remainder]string args = null)
         {                              
             ulong id;
-
             if (Context.Channel is IDMChannel)
             {
                 id = (ulong)Context.User.Id;                
@@ -201,107 +115,7 @@ namespace SevenThree.Modules
             else
             {
                 await ReplyAsync("No quiz to end!");
-            }
-            /*               
-            var random    = new Random();
-            var questions = await _db.Questions.Include(q => q.Test).ToListAsync();
-            var question  = questions[random.Next(questions.Count())];
-            var answers   = await _db.Answer.Where(a => a.Question.QuestionId == question.QuestionId).ToListAsync();
-            var sb        = new StringBuilder();
-
-            var embed = new EmbedBuilder();
-
-            embed.Title = $"Question [{question.QuestionSection}] from test: [{question.Test.TestName}]!";            
-            embed.WithColor(new Color(0, 255, 0));
-            
-            if (question.FccPart != null)
-            {
-                embed.AddField(new EmbedFieldBuilder{
-                    Name  = "FCC Part",
-                    Value = question.FccPart 
-                });
-            }
-
-            embed.AddField(new EmbedFieldBuilder{
-                Name  = $"Subelement [**{question.SubelementName}**]",
-                Value = question.SubelementDesc
-            });   
-
-            embed.AddField(new EmbedFieldBuilder{
-                Name     = $"Question:",
-                Value    = question.QuestionText,
-                IsInline = false                
-            });
-                             
-            //associate answers with letters (randomly)
-            var answerOptions = new List<Tuple<char, Answer>>();               
-            var letters       = new List<char>(){'A','B','C','D'};
-            var usedNumbers   = new List<int>();
-            var usedLetters   = new List<char>();
-            
-            bool addingAnswers = true;
-            int i = 0;
-            while(addingAnswers) 
-            {                
-                var randAnswer = random.Next(answers.Count());
-                while (usedNumbers.Contains(randAnswer))
-                {
-                    randAnswer = random.Next(answers.Count());
-                }
-                var answer = answers[randAnswer];
-                var letter = letters[i];
-
-                answerOptions.Add(Tuple.Create(letter, answer));
-                usedNumbers.Add(randAnswer);
-                if (answerOptions.Count() == answers.Count())
-                {                    
-                    addingAnswers = false;
-                }                
-                i++;
-            }
-
-            foreach (var answer in answerOptions)
-            {
-                var letter     = answer.Item1;
-                var answerData = answer.Item2;
-                embed.AddField(new EmbedFieldBuilder{
-                    Name     = $"{letter}.",
-                    Value    = answerData.AnswerText,
-                    IsInline = true
-                });                
-            }
-               
-            await ReplyAsync("",false,embed.Build());               
-
-            bool answered = false;
-            
-            do 
-            {
-                var response = await NextMessageAsync();
-                char? answerChar = null;
-                try 
-                {
-                    answerChar = char.Parse(response.Content.ToUpper());
-                }
-                catch(Exception ex)
-                {
-                    System.Console.WriteLine($"Error [{ex.Message}]!");
-                }
-                if (answerChar.HasValue)
-                {
-                    var possibleAnswer = answerOptions.Where(w => w.Item1 == answerChar).Select(w => w.Item2).FirstOrDefault();
-                    if (possibleAnswer.IsAnswer)
-                    {
-                        var answerText = new StringBuilder();
-                        answerText.AppendLine($"Congrats -> **[{response.Author.Mention}]** <-!");
-                        answerText.AppendLine($"You had the correct answer of [*{answerChar}*] -> [**{possibleAnswer.AnswerText}**]");
-                        await ReplyAsync(answerText.ToString());                    
-                        answered = true;
-                    }  
-                }              
-            }
-            while (!answered);    
-            */        
+            }      
         }                
 
         [Command("import")]
