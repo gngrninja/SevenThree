@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using System.Text;
+using System.IO;
 
 namespace SevenThree.Modules
 {
@@ -29,6 +30,7 @@ namespace SevenThree.Modules
         private readonly IGuild _guild;
         private readonly ITextChannel _channel;
         private readonly List<Questions> _questions;
+        private List<Questions> _questionsAsked;
         private readonly IUser _user;
 
         public bool ShouldStopTest { get; private set; }
@@ -87,6 +89,8 @@ namespace SevenThree.Modules
              _questions = questions;
              _channel = channel;  
              _id = id;           
+
+             _questionsAsked = new List<Questions>();
         }
 
         public QuizUtil(
@@ -105,6 +109,8 @@ namespace SevenThree.Modules
              _questions = questions;
              _user = user;       
              _id = id;   
+
+             _questionsAsked = new List<Questions>();
         }        
 
         public void SetServer(ulong discordServer)
@@ -123,6 +129,12 @@ namespace SevenThree.Modules
             System.Console.WriteLine("hi");
         }
 
+        internal void StopQuiz()
+        {
+            ShouldStopTest = true;
+            _client.MessageReceived -= PotentialAnswer;
+        }
+
         public async Task StartGame()
         {
             while (!ShouldStopTest)
@@ -130,14 +142,37 @@ namespace SevenThree.Modules
                 _tokenSource = new CancellationTokenSource();
                 var random = new Random();
                 CurrentQuestion = _questions[random.Next(_questions.Count)];
-                
+                _questionsAsked.Add(CurrentQuestion);
+                _questions.Remove(CurrentQuestion);
+                if (_questions.Count <= 0)
+                {
+                    StopQuiz();
+                    continue;
+                }
                 try
                 {
-                    //make code for old CurrentQuestions
-                    var embed = GetQuestionEmbed();
-                    //associate answers with letters (randomly)                    
-                    await SetupAnswers(random, embed);                    
-                    await SendReplyAsync(embed);
+                    var activeQuiz = await _db.Quiz.Where(r => r.ServerId == Id).FirstOrDefaultAsync();
+                    if (activeQuiz != null)
+                    {
+                        //make code for old CurrentQuestions
+                        var embed = GetQuestionEmbed();
+                        //associate answers with letters (randomly)                    
+                        await SetupAnswers(random, embed);   
+
+                        if (!string.IsNullOrEmpty(CurrentQuestion.FigureName))
+                        {
+                            await SendReplyAsync(embed, true);
+                        }
+                        else
+                        {
+                            await SendReplyAsync(embed, false);
+                        }
+                    }      
+                    else
+                    {
+                        StopQuiz();
+                        continue;
+                    }              
                 }
                 catch (Exception ex)
                 {
@@ -323,21 +358,56 @@ namespace SevenThree.Modules
             return Task.CompletedTask;
         }
 
-        private Task SendReplyAsync(EmbedBuilder embed)
+        private Task SendReplyAsync(EmbedBuilder embed, bool hasFigure)
         {
             var _ = Task.Run(async () => 
             {
                 if (_channel != null)
                 {
-                    await _channel.SendMessageAsync(null, false, embed.Build());
+                    if (hasFigure)
+                    {
+                        var figure = _db.Figure.Include(t => t.Test).Where(f => f.FigureName == CurrentQuestion.FigureName).FirstOrDefault();
+                        if (figure != null)
+                        {                     
+                            var fileName = $"{figure.Test.TestName}_{figure.FigureName}.png";
+                            if (!File.Exists(fileName))
+                            {   
+                                await File.WriteAllBytesAsync(fileName, figure.FigureImage);         
+                            }                              
+                            embed.WithImageUrl($"attachment://{fileName}");
+                            await _channel.SendFileAsync($"{fileName}", "", false, embed.Build());                
+                            File.Delete(fileName);
+                         }
+                    }
+                    else
+                    {
+                        await _channel.SendMessageAsync(null, false, embed.Build());
+                    }                    
                 }
                 else if (_user != null)
                 {
-                    await _user.SendMessageAsync(null, false, embed.Build());
+                    if (hasFigure)
+                    {
+                        var figure = _db.Figure.Include(t => t.Test).Where(f => f.FigureName == CurrentQuestion.FigureName).FirstOrDefault();
+                        if (figure != null)
+                        {                     
+                            var fileName = $"{figure.Test.TestName}_{figure.FigureName}.png";
+                            if (!File.Exists(fileName))
+                            {   
+                                await File.WriteAllBytesAsync(fileName, figure.FigureImage);         
+                            }             
+                            embed.WithImageUrl($"attachment://{fileName}");
+                            await _user.SendFileAsync($"{fileName}", "", false, embed.Build());                                
+                            File.Delete(fileName);
+                         }
+                    }
+                    else
+                    {
+                        await _user.SendMessageAsync(null, false, embed.Build());
+                    }                    
                 } 
             });
             return Task.CompletedTask;
         }
-
     }
 }

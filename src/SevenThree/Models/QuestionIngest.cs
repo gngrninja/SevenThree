@@ -29,6 +29,9 @@ namespace SevenThree.Models
         [JsonProperty("Question")]
         public string Question { get; set; }
 
+        [JsonProperty("Figure")]
+        public string Figure { get; set; }
+
         [JsonProperty("SubelementName")]
         public SubelementName SubelementName { get; set; }
 

@@ -18,5 +18,6 @@ namespace SevenThree.Database
         public string Subelement { get; set; }
         public string SubelementName { get; set; }
         public string SubelementDesc { get; set; }
+        public string FigureName { get; set; }
     }
 }

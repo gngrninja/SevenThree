@@ -12,6 +12,7 @@ namespace SevenThree.Database
         public DbSet<Questions> Questions { get; set; }
         public DbSet<Answer> Answer { get; set ;}
         public DbSet<Quiz> Quiz { get; set; }
+        public DbSet<Figure> Figure { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {

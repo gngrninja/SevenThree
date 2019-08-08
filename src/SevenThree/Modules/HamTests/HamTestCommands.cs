@@ -23,7 +23,7 @@ namespace SevenThree.Modules
     {
         private readonly ILogger _logger;
         private readonly SevenThreeContext _db;
-        private readonly IServiceProvider _services;        
+        private readonly IServiceProvider _services;     
 
         public HamTestCommands(IServiceProvider services)
         {
@@ -59,6 +59,20 @@ namespace SevenThree.Modules
                 });
                 await _db.SaveChangesAsync();
                 var questions = await _db.Questions.Include(q => q.Test).ToListAsync();
+
+                var random = new Random();
+                var testQuestions = new List<Questions>();
+
+                for (int i = 0; i <= 34; i++)
+                {                    
+                    var randQuestion = questions[random.Next(questions.Count)];
+                    while(testQuestions.Contains(randQuestion))
+                    {
+                        randQuestion = questions[random.Next(questions.Count)];                        
+                    }
+                    testQuestions.Add(randQuestion);
+                }
+                System.Console.WriteLine(testQuestions.Count());
                 await ReplyAsync("Quiz is active!");
                 QuizUtil startQuiz = null;
                 if (Context.Channel is IDMChannel)
@@ -67,7 +81,7 @@ namespace SevenThree.Modules
                         user: Context.User as IUser, 
                         services: _services,
                         guild: Context.Guild as IGuild,
-                        questions: questions,
+                        questions: testQuestions,
                         id: id
                     ); 
                 } 
@@ -77,7 +91,7 @@ namespace SevenThree.Modules
                         channel: Context.Channel as ITextChannel, 
                         services: _services,
                         guild: Context.Guild as IGuild,
-                        questions: questions,
+                        questions: testQuestions,
                         id: id
                     ); 
                 }
@@ -92,7 +106,7 @@ namespace SevenThree.Modules
         [Command("stop", RunMode = RunMode.Async)]
         public async Task StopQuiz([Remainder]string args = null)
         {                              
-            ulong id;
+            ulong id;            
             if (Context.Channel is IDMChannel)
             {
                 id = (ulong)Context.User.Id;                
@@ -118,7 +132,7 @@ namespace SevenThree.Modules
             }      
         }                
 
-        [Command("import")]
+        [Command("import", RunMode = RunMode.Async)]
         public async Task ImportQuestions()
         {
             var test = _db.HamTest.FirstOrDefault();
@@ -132,7 +146,7 @@ namespace SevenThree.Modules
                 await _db.SaveChangesAsync();
             }
             test = _db.HamTest.FirstOrDefault();
-
+            
             //get questions converted from json to C# objects
             var question = QuestionIngest.FromJson(File.ReadAllText("tech.json"));             
             
@@ -158,6 +172,7 @@ namespace SevenThree.Modules
                         QuestionText    = questionText,
                         QuestionSection = questionId,  
                         SubelementDesc  = subDesc,
+                        FigureName      = item.Figure,
                         SubelementName  = subName.ToString(),
                         Test = _db.HamTest.FirstOrDefault()                      
                     });
@@ -170,6 +185,7 @@ namespace SevenThree.Modules
                         QuestionSection = questionId,
                         FccPart         = fccPart,
                         SubelementDesc  = subDesc,
+                        FigureName      = item.Figure,
                         SubelementName  = subName.ToString(),
                         Test = _db.HamTest.FirstOrDefault()                         
                     });
@@ -201,7 +217,50 @@ namespace SevenThree.Modules
                 }
                 await _db.SaveChangesAsync();
             }
+            
+            string[] figureNames = new string[]{"T1", "T2", "T3"};
+            var figureTest = _db.HamTest.FirstOrDefault();
+            if (figureTest != null)
+            {
+                foreach (var name in figureNames)
+                {
+                    string curFigure = $"tech_{name}.png";
+                    System.Console.WriteLine(name);
+                    if (File.Exists(curFigure))
+                    {                    
+                        var contents = File.ReadAllBytes(curFigure);
+
+                        await _db.AddAsync(
+                        new Figure{
+                            Test        = figureTest,
+                            FigureName  = name,
+                            FigureImage = contents
+                        });                    
+
+                        await _db.SaveChangesAsync();
+                    }
+                }
+            }                       
             await ReplyAsync("yay");
         }        
+
+        [Command("t1")]
+        public async Task GetTeeOne()
+        {
+            var t1 = _db.Figure.Include(t => t.Test).Where(f => f.FigureName == "T1").FirstOrDefault();
+            if (t1 != null)
+            {                     
+                var fileName = $"{t1.Test.TestName}_{t1.FigureName}.png";
+
+                var embed = new EmbedBuilder();
+                embed.Title = "T1";
+                embed.Description = "test";
+                await File.WriteAllBytesAsync(fileName, t1.FigureImage);           
+                embed.WithImageUrl($"attachment://{fileName}");
+                await Context.Channel.SendFileAsync($"{fileName}", "", false, embed.Build());                
+
+                File.Delete(fileName);
+            }
+        }
     }
 }
