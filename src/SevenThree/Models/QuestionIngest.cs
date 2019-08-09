@@ -33,7 +33,7 @@ namespace SevenThree.Models
         public string Figure { get; set; }
 
         [JsonProperty("SubelementName")]
-        public SubelementName SubelementName { get; set; }
+        public string SubelementName { get; set; }
 
         [JsonProperty("SubelementDesc")]
         public string SubelementDesc { get; set; }

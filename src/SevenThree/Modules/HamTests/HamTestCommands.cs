@@ -133,22 +133,91 @@ namespace SevenThree.Modules
         }                
 
         [Command("import", RunMode = RunMode.Async)]
-        public async Task ImportQuestions()
-        {
-            var test = _db.HamTest.FirstOrDefault();
+        public async Task ImportQuestions([Remainder]string args = null)
+        {    
+            if (args == null)
+            {
+                await ReplyAsync("Please specify tech, general, or extra!");
+                return;
+            }
+
+            var testName = string.Empty;
+            var testDesc = string.Empty;
+
+            switch (args.ToLower())
+            {
+                case "tech":
+                {
+                    testName = "tech";
+                    testDesc = "U.S. Ham Radio test for the technician class license.";
+                    break;
+                }
+                case "general":
+                {
+                    testName = "general";
+                    testDesc = "U.S. Ham Radio test for the general class license.";
+                    break;
+                }
+                case "extra":
+                {
+                    testName = "extra";
+                    testDesc = "U.S. Ham Radio test for the extra class license.";
+                    break;
+                }               
+                default:
+                {
+                   await ReplyAsync("Please specify tech, general, or extra!");
+                   return; 
+                } 
+            }
+
+            var test = _db.HamTest.Where(t => t.TestName == testName).FirstOrDefault();
+
             if (test == null)
             {
                 await _db.AddAsync(
                     new HamTest{
-                        TestName = "Tech",
-                        TestDescription = "Test for technician license"
+                        TestName = testName,
+                        TestDescription = testDesc
                     });
                 await _db.SaveChangesAsync();
+            } 
+            else {
+
+                //clear old test items
+                var figures = _db.Figure.Where(f => f.Test.TestName == testName).ToList();
+                if (figures != null)
+                {
+                    foreach (var figure in figures)
+                    {
+                        _db.Remove(figure);
+                    }
+                    await _db.SaveChangesAsync();
+                }
+                var answers = _db.Answer.Where(a => a.Question.Test.TestName == testName).ToList();
+                if (answers != null)
+                {
+                    foreach (var answer in answers)
+                    {
+                        _db.Remove(answer);
+                    }
+                    await _db.SaveChangesAsync();
+                }
+                var questions = _db.Questions.Where(q => q.Test.TestName == testName).ToList();
+                if (questions != null)
+                {
+                    foreach (var questionItem in questions)
+                    {
+                        _db.Remove(questionItem);
+                    }
+                    await _db.SaveChangesAsync();
+                }
             }
-            test = _db.HamTest.FirstOrDefault();
+
+            test = _db.HamTest.Where(t => t.TestName == testName).FirstOrDefault();
             
             //get questions converted from json to C# objects
-            var question = QuestionIngest.FromJson(File.ReadAllText("tech.json"));             
+            var question = QuestionIngest.FromJson(File.ReadAllText($"import/{testName}/{testName}.json"));             
             
             //loop through and add to the database
             foreach (var item in question)
@@ -160,11 +229,6 @@ namespace SevenThree.Modules
                 var subDesc      = item.SubelementDesc;
                 var subName      = item.SubelementName;
 
-                //_db.Database.ExecuteSqlCommand("PRAGMA foreign_keys = OFF");
-                //_db.Database.ExecuteSqlCommand("DELETE FROM Questions");
-                //_db.Database.ExecuteSqlCommand("DELETE FROM Answer");
-                //_db.Database.ExecuteSqlCommand("PRAGMA foreign_keys = ON");
-
                 if (string.IsNullOrEmpty(fccPart))
                 {
                     await _db.AddAsync(
@@ -174,7 +238,7 @@ namespace SevenThree.Modules
                         SubelementDesc  = subDesc,
                         FigureName      = item.Figure,
                         SubelementName  = subName.ToString(),
-                        Test = _db.HamTest.FirstOrDefault()                      
+                        Test = test                      
                     });
                 }
                 else
@@ -187,7 +251,7 @@ namespace SevenThree.Modules
                         SubelementDesc  = subDesc,
                         FigureName      = item.Figure,
                         SubelementName  = subName.ToString(),
-                        Test = _db.HamTest.FirstOrDefault()                         
+                        Test = test                         
                     });
                 }
 
@@ -218,22 +282,22 @@ namespace SevenThree.Modules
                 await _db.SaveChangesAsync();
             }
             
-            string[] figureNames = new string[]{"T1", "T2", "T3"};
-            var figureTest = _db.HamTest.FirstOrDefault();
-            if (figureTest != null)
+            var files = Directory.EnumerateFiles($"import/{testName}",$"{testName}_*.png");
+
+            if (test != null)
             {
-                foreach (var name in figureNames)
+                foreach (var file in files)
                 {
-                    string curFigure = $"tech_{name}.png";
-                    System.Console.WriteLine(name);
+                    string curFigure = file;
+                    //System.Console.WriteLine(name);
                     if (File.Exists(curFigure))
                     {                    
                         var contents = File.ReadAllBytes(curFigure);
 
                         await _db.AddAsync(
                         new Figure{
-                            Test        = figureTest,
-                            FigureName  = name,
+                            Test        = test,
+                            FigureName  = file.Split('_')[1].Replace(".png","").Trim(),
                             FigureImage = contents
                         });                    
 
@@ -241,7 +305,7 @@ namespace SevenThree.Modules
                     }
                 }
             }                       
-            await ReplyAsync("yay");
+            await ReplyAsync($"Imported {testName} into the database!");
         }        
 
         [Command("t1")]
