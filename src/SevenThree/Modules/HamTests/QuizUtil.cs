@@ -35,10 +35,12 @@ namespace SevenThree.Modules
         private readonly IUser _user;        
         private readonly int _totalQuestions;
         private Quiz _quiz;
+        private int _questionDelay;
         public bool ShouldStopTest { get; private set; }
         public Questions CurrentQuestion { get; private set; }
         public List<Tuple<char, Answer>> Answers { get; private set; }
         public Quiz Quiz { get; private set; }
+        private IGuildUser _startedBy;
 
         public bool IsActive
         {
@@ -81,7 +83,8 @@ namespace SevenThree.Modules
             ITextChannel channel,
             List<Questions> questions,
             IServiceProvider services,
-            ulong id            
+            ulong id,
+            IGuildUser startedBy            
         )
         {
             _logger = services.GetRequiredService<ILogger<CallAssociation>>();
@@ -93,7 +96,9 @@ namespace SevenThree.Modules
             _channel = channel;  
             _id = id;              
             _totalQuestions = questions.Count;
-            _questionsAsked = new List<Questions>();                                   
+            _questionsAsked = new List<Questions>();   
+            _questionDelay = 60000;    
+            _startedBy = startedBy;                            
         }
 
         public QuizUtil(
@@ -101,7 +106,8 @@ namespace SevenThree.Modules
             IUser user,
             List<Questions> questions,
             IServiceProvider services,
-            ulong id
+            ulong id,
+            IGuildUser startedBy
         )
         {
             _logger = services.GetRequiredService<ILogger<CallAssociation>>();
@@ -114,7 +120,9 @@ namespace SevenThree.Modules
             _id = id;   
             _totalQuestions = questions.Count;
             _questionsAsked = new List<Questions>();        
-            _isDmTest = true;                
+            _isDmTest = true;    
+            _questionDelay = 60000;            
+            _startedBy = startedBy;
         }        
 
         public void SetServer(ulong discordServer)
@@ -135,42 +143,32 @@ namespace SevenThree.Modules
             {
                 if (_questions.Count == 0)
                 {
-                    StopQuiz();
+                    await StopQuiz().ConfigureAwait(false);
                     return;
                 } 
                 _tokenSource = new CancellationTokenSource();
                 var random = new Random();
-                CurrentQuestion = _questions[random.Next(_questions.Count)];     
-          
+                CurrentQuestion = _questions[random.Next(_questions.Count)];               
                 _questions.Remove(CurrentQuestion);
                 try
                 {
-                    var activeQuiz = await _db.Quiz.Where(r => r.ServerId == Id).FirstOrDefaultAsync();
-                    if (activeQuiz != null)
+                    //add question to questions asked pool
+                    _questionsAsked.Add(CurrentQuestion);
+
+                    //make code for old CurrentQuestions
+                    var embed = GetQuestionEmbed();
+
+                    //associate answers with letters (randomly)                    
+                    await SetupAnswers(random, embed);
+                    
+                    if (!string.IsNullOrEmpty(CurrentQuestion.FigureName))
                     {
-                        //add question to questions asked pool
-                        _questionsAsked.Add(CurrentQuestion);
-
-                        //make code for old CurrentQuestions
-                        var embed = GetQuestionEmbed();
-
-                        //associate answers with letters (randomly)                    
-                        await SetupAnswers(random, embed);
-                        
-                        if (!string.IsNullOrEmpty(CurrentQuestion.FigureName))
-                        {
-                            await SendReplyAsync(embed, true);
-                        }
-                        else
-                        {
-                            await SendReplyAsync(embed, false);
-                        }                        
-                    }      
+                        await SendReplyAsync(embed, true);
+                    }
                     else
                     {
-                        StopQuiz();
-                        return;
-                    }              
+                        await SendReplyAsync(embed, false);
+                    }                                                            
                 }
                 catch (Exception ex)
                 {
@@ -181,12 +179,16 @@ namespace SevenThree.Modules
                     _client.MessageReceived += ListenForAnswer;
                     IsActive = true;
                     try
-                    {
-                        await Task.Delay(60000, _tokenSource.Token).ConfigureAwait(false);
+                    {                        
+                        await Task.Delay(_questionDelay, _tokenSource.Token).ConfigureAwait(false);
+                        if (!_tokenSource.IsCancellationRequested && !ShouldStopTest)
+                        {
+                            await NoAnswer().ConfigureAwait(false);
+                        }
                     }        
                     catch (TaskCanceledException)
                     {
-                        //question is answered
+                        //IsActive = false;
                         Thread.Sleep(5000);
                     }
                 }   
@@ -195,13 +197,29 @@ namespace SevenThree.Modules
                     _client.MessageReceived -= ListenForAnswer;
                     IsActive = false;
                 }
-                if (!_tokenSource.IsCancellationRequested)
-                {
-                    //actions if the timer expires and no one answered
-                    var embed = new EmbedBuilder();
-                    _client.MessageReceived -= ListenForAnswer;
-                }
             }                                        
+        }
+
+        private async Task NoAnswer()
+        {
+            IsActive = false;
+
+            //actions if the timer expires and no one answered
+            _client.MessageReceived -= ListenForAnswer;
+
+            var embed = new EmbedBuilder();
+            embed.Title = $"Nobody answered correctly :(";
+            var sb = new StringBuilder();
+            sb.AppendLine($"Question: [**{CurrentQuestion.QuestionText}**]");
+            var answer = Answers.Where(a => a.Item2.IsAnswer).FirstOrDefault();
+            if (answer != null)
+            {
+                sb.AppendLine();
+                sb.AppendLine($"Answer: [**{answer.Item1}**] -> [**{answer.Item2.AnswerText}**]");
+            }
+            embed.Description = sb.ToString();
+            embed.WithColor(new Color(255, 0, 0));
+            await SendReplyAsync(embed, false);
         }
 
         private async Task SetupAnswers(Random random, EmbedBuilder embed)
@@ -253,8 +271,38 @@ namespace SevenThree.Modules
         {
             var embed = new EmbedBuilder();
 
+            embed.WithAuthor(
+                new EmbedAuthorBuilder
+                {
+                    Name    = $"Test started by [{_startedBy.Username}]",
+                    IconUrl = _startedBy.GetAvatarUrl()    
+                }
+            );
             embed.Title = $"Question: [{CurrentQuestion.QuestionSection}] From Test: [{CurrentQuestion.Test.TestName}]!";
-            embed.WithColor(new Color(0, 255, 0));
+
+            switch (CurrentQuestion.Test.TestName)
+            {
+                case "tech":
+                {
+                    embed.WithColor(new Color(0, 128, 255));
+                    break;
+                }
+                case "general":
+                {
+                    embed.WithColor(new Color(102, 102, 255));
+                    break;
+                }
+                case "extra":
+                {
+                    embed.WithColor(new Color(255, 102, 255));
+                    break;
+                }
+                default:
+                {
+                    embed.WithColor(new Color(0 ,255, 0));
+                    break;
+                }
+            }
 
             if (CurrentQuestion.FccPart != null)
             {
@@ -274,13 +322,15 @@ namespace SevenThree.Modules
             embed.AddField(new EmbedFieldBuilder
             {
                 Name = $"Question:",
-                Value = CurrentQuestion.QuestionText,
+                Value = $"**{CurrentQuestion.QuestionText}**",
                 IsInline = false
             });
 
             embed.WithFooter(new EmbedFooterBuilder{
-               Text = $"Question ({_questionsAsked.Count} / {_totalQuestions})!"
-            });            
+               Text = $"Question ({_questionsAsked.Count} / {_totalQuestions})... [{_questionDelay/1000}] seconds to answer!"
+            });          
+
+            embed.ThumbnailUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true";  
 
             return embed;
         }
@@ -324,7 +374,7 @@ namespace SevenThree.Modules
                             if (userAnswered == null)
                             {                                                                
                                 if (answerChar == 'A' || answerChar == 'B' || answerChar == 'C' || answerChar == 'D')
-                                {
+                            {
                                     Answer possibleAnswer = null;                                    
                                     possibleAnswer = Answers.Where(w => w.Item1 == answerChar).Select(w => w.Item2).FirstOrDefault();                                    
                                     if (possibleAnswer.IsAnswer)
@@ -369,7 +419,12 @@ namespace SevenThree.Modules
             }  
             else
             {
-                answerText.AppendLine($"The correct answer was [{Answers.Where(a => a.Item2.IsAnswer).FirstOrDefault().Item1}] -> [{Answers.Where(a => a.Item2.IsAnswer).FirstOrDefault().Item2.AnswerText}]");
+                var answer = Answers.Where(a => a.Item2.IsAnswer).FirstOrDefault();
+                if (answer != null)
+                {
+                    answerText.AppendLine($"The correct answer was [**{answer.Item1}**] -> [**{answer.Item2.AnswerText}**]");
+                }                
+                
             }          
             await msg?.Author.SendMessageAsync(answerText.ToString());
             _db.UserAnswer.Add(new UserAnswer
@@ -404,10 +459,32 @@ namespace SevenThree.Modules
             correctAnswers = await _db.UserAnswer.Where(u => (ulong)u.UserId == msg.Author.Id && u.IsAnswer && u.Quiz.QuizId == Quiz.QuizId).ToListAsync();
             var embed = new EmbedBuilder();
             embed.Title = "Question Answered Correctly!";
+            embed.WithColor(new Color(0, 255, 0));                        
             var answerText = new StringBuilder();
-            answerText.AppendLine($"Congrats -> **[{msg.Author.Mention}]** <-!");
+            answerText.AppendLine($"Congrats -> **[{msg.Author.Mention}]** <-");
+            answerText.AppendLine($"The question was -> [**{CurrentQuestion.QuestionText}**]");
+            answerText.AppendLine();
             answerText.AppendLine($"You had the correct answer of [*{answerChar}*] -> [**{possibleAnswer.AnswerText}**]");
-            answerText.Append($"You have [**{correctAnswers.Count}**] correct answers so far.");
+
+            if (correctAnswers.Count == 1)
+            {
+                embed.WithFooter(
+                    new EmbedFooterBuilder
+                    {
+                        Text = $"[{msg?.Author.Username}] has just one correct answer so far!"
+                    }
+                );
+            }
+            else if (correctAnswers.Count > 1)
+            {
+                embed.WithFooter(
+                    new EmbedFooterBuilder
+                    {
+                        Text = $"[{msg?.Author.Username}] has [{correctAnswers.Count}] correct answer so far!"
+                    }
+                );
+            }
+                        
             embed.Description = answerText.ToString();
             embed.ThumbnailUrl = msg.Author.GetAvatarUrl();
             await SendReplyAsync(embed, false);
@@ -501,6 +578,7 @@ namespace SevenThree.Modules
         {
             //wrap quiz up here
             ShouldStopTest = true;  
+            //_tokenSource.Cancel();
             _client.MessageReceived -= ListenForAnswer;                                 
             var quiz = _db.Quiz.Where(q => q.QuizId == Quiz.QuizId).FirstOrDefault();  
             quiz.TimeEnded = DateTime.Now;

@@ -85,7 +85,8 @@ namespace SevenThree.Modules
                     services: _services,
                     guild: Context.Guild as IGuild,
                     questions: testQuestions,
-                    id: id
+                    id: id,
+                    startedBy: (IGuildUser)Context.User
                 );
             }
             else
@@ -95,7 +96,8 @@ namespace SevenThree.Modules
                     services: _services,
                     guild: Context.Guild as IGuild,
                     questions: testQuestions,
-                    id: id                    
+                    id: id,
+                    startedBy: (IGuildUser)Context.User                    
                 );
             }
             if (_hamTestService.RunningTests.TryAdd(id, startQuiz) || !_hamTestService.RunningTests.Keys.Contains(id))
