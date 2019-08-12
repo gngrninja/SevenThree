@@ -183,10 +183,7 @@ namespace SevenThree.Modules
                     try
                     {                        
                         await Task.Delay(_questionDelay, _tokenSource.Token).ConfigureAwait(false);
-                        if (!_tokenSource.IsCancellationRequested && !ShouldStopTest)
-                        {
-                            await NoAnswer().ConfigureAwait(false);
-                        }
+                        await NoAnswer().ConfigureAwait(false);
                     }        
                     catch (TaskCanceledException)
                     {
