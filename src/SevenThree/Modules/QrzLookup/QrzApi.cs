@@ -37,9 +37,8 @@ namespace SevenThree.Modules
                     
             _baseUrl = "https://xmldata.qrz.com/xml/current";
             System.Console.WriteLine("user");
-            //_userName = Console.ReadLine();
-            
-            /* 
+            _userName = Console.ReadLine();
+                        
             System.Console.WriteLine("password");
             while (true)
             {
@@ -50,7 +49,7 @@ namespace SevenThree.Modules
                 }
                 _password += key.KeyChar;
             }
-            */
+            
             
             _creds = _secure.ConvertToSecure(username: _userName, password: _password);
 

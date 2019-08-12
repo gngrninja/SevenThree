@@ -13,13 +13,13 @@ using Microsoft.Extensions.Logging;
 
 namespace SevenThree.Modules
 {
-    public class QrzLookupCommands 
+    public class QrzLookupCommands : ModuleBase
     {
         private readonly QrzApi _qrzApi;
         private readonly ILogger _logger;
         private readonly IConfiguration _config;
 
-        public QrzLookupCommands(IServiceProvider services)
+        public QrzLookupCommands(IServiceProvider services) 
         {
             _config = services.GetRequiredService<IConfiguration>();
             _logger = services.GetRequiredService<ILogger<QrzLookupCommands>>();
@@ -31,7 +31,7 @@ namespace SevenThree.Modules
         {
             var result = await _qrzApi.GetCallInfo(callsign);
             var embed = new EmbedBuilder();
-            embed.Title = $"Callsign information for {result.Callsign.Call}";
+            embed.Title = $"{result.Callsign.Url}Callsign information for {result.Callsign.Call}";
 
             embed.Fields.Add(new EmbedFieldBuilder{
                 Name = "Name",
@@ -80,14 +80,19 @@ namespace SevenThree.Modules
                 IsInline = true
             });
 
+            embed.Fields.Add(new EmbedFieldBuilder{
+                Name = "QRZ Profile Link",
+                Value = $"https://qrz.com/db/{result.Callsign.Call}"
+            });
+
             embed.WithColor(new Color(0, 255, 50));
 
             if (!string.IsNullOrEmpty(result.Callsign.Image))
             {
                 embed.ImageUrl = result.Callsign.Image;
-            }
-            //embed.ThumbnailUrl = Context.User.GetAvatarUrl();
-            //await ReplyAsync(null, false, embed.Build()); 
+            }            
+            embed.ThumbnailUrl = Context.User.GetAvatarUrl();
+            await ReplyAsync(null, false, embed.Build()); 
         }
     }
 }

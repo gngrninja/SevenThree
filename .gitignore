@@ -8,3 +8,4 @@ Migrations/
 *.db
 xmlExamples/
 *.old
+import/

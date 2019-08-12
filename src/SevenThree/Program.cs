@@ -93,7 +93,8 @@ namespace SevenThree
                 .AddSingleton<XmlServices>()
                 .AddSingleton<SecurityServices>()
                 .AddTransient<Quiz>()
-                //.AddSingleton<QrzApi>()
+                .AddSingleton<QrzApi>()
+                .AddSingleton<HamTestService>()
                 .AddSingleton<InteractiveService>()
                 .AddDbContext<SevenThreeContext>()         
                 .AddSingleton<CommandHandler>();

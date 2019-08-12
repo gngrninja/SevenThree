@@ -10,8 +10,13 @@ namespace SevenThree.Database
         public int UserAnswerId { get; set; }     
 
         [ForeignKey("QuestionId")]
-        public Questions Question { get; set;}
+        public Questions Question { get; set; }
         
+        [ForeignKey("QuizId")]
+        public Quiz Quiz { get; set; }
+        
+        public string UserName { get; set; }
+        public long UserId { get; set; }
         public string AnswerText { get; set; }
         public bool IsAnswer { get; set; }
     }

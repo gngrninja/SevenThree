@@ -14,6 +14,7 @@ using Microsoft.EntityFrameworkCore;
 using SevenThree.Database;
 using SevenThree.Models;
 using Discord.Addons.Interactive;
+using SevenThree.Services;
 using System.IO;
 
 namespace SevenThree.Modules
@@ -24,88 +25,108 @@ namespace SevenThree.Modules
         private readonly ILogger _logger;
         private readonly SevenThreeContext _db;
         private readonly IServiceProvider _services;     
+        private readonly HamTestService _hamTestService;
 
         public HamTestCommands(IServiceProvider services)
         {
             _logger = services.GetRequiredService<ILogger<CallAssociation>>();
             _db = services.GetRequiredService<SevenThreeContext>();
             _services = services;            
+            _hamTestService = services.GetRequiredService<HamTestService>();
         }
 
         [Command("start", RunMode = RunMode.Async)]
-        public async Task StartQuiz([Remainder]string args = null)
+        public async Task StartQuiz(string args, int numQuestions = 35, [Remainder]string directMessage = null)
         {                 
-                        
+            if (args == null)
+            {
+                await ReplyAsync("Please specify tech, general, or extra!");
+                return;
+            }
+            var testName = string.Empty;
+            switch (args.ToLower())
+            {
+                case "tech":
+                {
+                    testName = "tech";                    
+                    break;
+                }
+                case "general":
+                {
+                    testName = "general";                    
+                    break;
+                }
+                case "extra":
+                {
+                    testName = "extra";                    
+                    break;
+                }               
+                default:
+                {
+                   await ReplyAsync("Please specify tech, general, or extra!");
+                   return; 
+                } 
+            }
             ulong id;
-
-            if (Context.Channel is IDMChannel)
+            if (Context.Channel is IDMChannel || directMessage != null)
             {
                 id = Context.User.Id;
             }
             else
             {
-                id = (ulong)Context.Guild.Id;                
-            }   
-
-            var quiz = _db.Quiz.Where(q => (ulong)q.ServerId == id).FirstOrDefault();
-
-            if (quiz == null)
+                id = Context.Guild.Id;                
+            }               
+            var testQuestions = await GetRandomQuestions(numQuestions, testName);
+            QuizUtil startQuiz = null;
+            if (Context.Channel is IDMChannel || directMessage != null)
+            {
+                startQuiz = new QuizUtil(
+                    user: Context.User as IUser,
+                    services: _services,
+                    guild: Context.Guild as IGuild,
+                    questions: testQuestions,
+                    id: id
+                );
+            }
+            else
+            {
+                startQuiz = new QuizUtil(
+                    channel: Context.Channel as ITextChannel,
+                    services: _services,
+                    guild: Context.Guild as IGuild,
+                    questions: testQuestions,
+                    id: id                    
+                );
+            }
+            if (_hamTestService.RunningTests.TryAdd(id, startQuiz) || !_hamTestService.RunningTests.Keys.Contains(id))
             {
                 await _db.Quiz.AddAsync(
-                new Quiz{
+                new Quiz
+                {
                     ServerId = id,
-                    IsActive = true,          
-                    TimeStarted = DateTime.Now                    
+                    IsActive = true,
+                    TimeStarted = DateTime.Now
                 });
                 await _db.SaveChangesAsync();
-                var questions = await _db.Questions.Include(q => q.Test).ToListAsync();
-
-                var random = new Random();
-                var testQuestions = new List<Questions>();
-
-                for (int i = 0; i <= 34; i++)
-                {                    
-                    var randQuestion = questions[random.Next(questions.Count)];
-                    while(testQuestions.Contains(randQuestion))
-                    {
-                        randQuestion = questions[random.Next(questions.Count)];                        
-                    }
-                    testQuestions.Add(randQuestion);
-                }
-                System.Console.WriteLine(testQuestions.Count());
-                await ReplyAsync("Quiz is active!");
-                QuizUtil startQuiz = null;
-                if (Context.Channel is IDMChannel)
+                var quiz = _db.Quiz.Where(q => (ulong)q.ServerId == id && q.IsActive).FirstOrDefault();
+                try
                 {
-                    startQuiz = new QuizUtil(
-                        user: Context.User as IUser, 
-                        services: _services,
-                        guild: Context.Guild as IGuild,
-                        questions: testQuestions,
-                        id: id
-                    ); 
-                } 
-                else
-                {
-                    startQuiz = new QuizUtil(
-                        channel: Context.Channel as ITextChannel, 
-                        services: _services,
-                        guild: Context.Guild as IGuild,
-                        questions: testQuestions,
-                        id: id
-                    ); 
+                    await startQuiz.StartGame(quiz).ConfigureAwait(false); 
                 }
-                await startQuiz.StartGame().ConfigureAwait(false);
+                finally
+                {
+                    _hamTestService.RunningTests.TryRemove(id, out startQuiz);
+                }                
             }
-            else if (quiz.IsActive)
+            else
             {
                 await ReplyAsync("There is already an active quiz!");
-            }          
-        }          
+            }        
+        }
 
         [Command("stop", RunMode = RunMode.Async)]
         public async Task StopQuiz([Remainder]string args = null)
-        {                              
+        {                   
             ulong id;            
             if (Context.Channel is IDMChannel)
             {
@@ -115,16 +136,10 @@ namespace SevenThree.Modules
             {
                 id = (ulong)Context.Guild.Id;                
             }   
-
-            var quiz = _db.Quiz.Where(q => (ulong)q.ServerId == id).FirstOrDefault();
-
-            if (quiz != null && quiz.IsActive)
-            {
-                quiz.TimeEnded = DateTime.Now;
-                quiz.IsActive  = false;
-                _db.Remove(quiz);
-                await _db.SaveChangesAsync();
-                await ReplyAsync("Quiz ended!");
+            QuizUtil trivia = null;
+            if (_hamTestService.RunningTests.TryRemove(id, out trivia))
+            {                
+                await trivia.StopQuiz().ConfigureAwait(false);                                
             }
             else
             {
@@ -133,6 +148,7 @@ namespace SevenThree.Modules
         }                
 
         [Command("import", RunMode = RunMode.Async)]
+        [RequireOwner]
         public async Task ImportQuestions([Remainder]string args = null)
         {    
             if (args == null)
@@ -308,23 +324,23 @@ namespace SevenThree.Modules
             await ReplyAsync($"Imported {testName} into the database!");
         }        
 
-        [Command("t1")]
-        public async Task GetTeeOne()
-        {
-            var t1 = _db.Figure.Include(t => t.Test).Where(f => f.FigureName == "T1").FirstOrDefault();
-            if (t1 != null)
-            {                     
-                var fileName = $"{t1.Test.TestName}_{t1.FigureName}.png";
+        private async Task<List<Questions>> GetRandomQuestions(int numQuestions, string testName)
+        {            
+            var questions = await _db.Questions.Include(q => q.Test).Where(q => q.Test.TestName == testName).ToListAsync();
+            var random = new Random();
+            var testQuestions = new List<Questions>();
 
-                var embed = new EmbedBuilder();
-                embed.Title = "T1";
-                embed.Description = "test";
-                await File.WriteAllBytesAsync(fileName, t1.FigureImage);           
-                embed.WithImageUrl($"attachment://{fileName}");
-                await Context.Channel.SendFileAsync($"{fileName}", "", false, embed.Build());                
-
-                File.Delete(fileName);
+            for (int i = 0; i < numQuestions; i++)
+            {
+                var randQuestion = questions[random.Next(questions.Count)];
+                while (testQuestions.Contains(randQuestion))
+                {
+                    randQuestion = questions[random.Next(questions.Count)];
+                }
+                testQuestions.Add(randQuestion);
             }
-        }
+
+            return testQuestions;
+        }        
     }
 }
