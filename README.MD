@@ -14,9 +14,11 @@ If you do not specify the number of questions, it will default to 35.
 ```
 +start tech 4
 ```
+
 ![start](https://github.com/gngrninja/SevenThree/blob/master/media/quiz_start.png?raw=true)
 
-Guessing is simple, just guess the letter of the answer. For tests in Discord channels, incorrect guesses will cause other guesses to be ignored until the next question is presented. 
+Guessing is simple, just guess the letter of the answer. For tests in Discord channels, incorrect guesses will cause other guesses to be ignored until the next question is presented.
+
 ![wrong](https://github.com/gngrninja/SevenThree/blob/master/media/wrong_answer.png?raw=true)
 
 ### Start a test for the general class license with 10 questions
@@ -33,15 +35,18 @@ Or if you're in a Discord server's channel, use:
 ```
 +start extra 20 private
 ```
+
 ![startpriv](https://github.com/gngrninja/SevenThree/blob/master/media/start_priv.png?raw=true)
 
 When you guess wrong on a private test, it will proceed to the next question, as well as tell you which answer was correct.
+
 ![startpriv](https://github.com/gngrninja/SevenThree/blob/master/media/priv_wrong.png?raw=true)
 
 ### Stop a test
 ```
 +stop
 ```
+
 ![startpriv](https://github.com/gngrninja/SevenThree/blob/master/media/stop_cmd.png?raw=true)
 
 ### Lookup a callsign
@@ -50,6 +55,7 @@ When you guess wrong on a private test, it will proceed to the next question, as
 ```
 
 This command will lookup information from QRZ, and present it in Discord. If they have a profile image, it will be shown in the embed.
+
 ![lookup](https://github.com/gngrninja/SevenThree/blob/master/media/lookup_call.png?raw=true)
 
 
