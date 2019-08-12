@@ -76,7 +76,17 @@ namespace SevenThree.Modules
             {
                 id = Context.Guild.Id;                
             }               
-            var testQuestions = await GetRandomQuestions(numQuestions, testName);
+            await _db.Quiz.AddAsync(
+                new Quiz
+                {
+                    ServerId = id,
+                    IsActive = true,
+                    TimeStarted = DateTime.Now,
+                    StartedById = (long)Context.User.Id,
+                    StartedByName = Context.User.Username,
+                    StartedByIconUrl = Context.User.GetAvatarUrl()
+                });
+            await _db.SaveChangesAsync();
             QuizUtil startQuiz = null;
             if (Context.Channel is IDMChannel || directMessage != null)
             {
@@ -84,9 +94,7 @@ namespace SevenThree.Modules
                     user: Context.User as IUser,
                     services: _services,
                     guild: Context.Guild as IGuild,
-                    questions: testQuestions,
-                    id: id,
-                    startedBy: Context.User
+                    id: id
                 );
             }
             else
@@ -95,30 +103,23 @@ namespace SevenThree.Modules
                     channel: Context.Channel as ITextChannel,
                     services: _services,
                     guild: Context.Guild as IGuild,
-                    questions: testQuestions,
-                    id: id,
-                    startedBy: Context.User
+                    id: id
                 );
             }
-            if (_hamTestService.RunningTests.TryAdd(id, startQuiz) || !_hamTestService.RunningTests.Keys.Contains(id))
-            {
-                await _db.Quiz.AddAsync(
-                new Quiz
+            if (_hamTestService.RunningTests.TryAdd(id, startQuiz))
+            {   
+                var quiz = _db.Quiz.Where(q => (ulong)q.ServerId == id && q.IsActive).FirstOrDefault();   
+                if (quiz != null)
                 {
-                    ServerId = id,
-                    IsActive = true,
-                    TimeStarted = DateTime.Now
-                });
-                await _db.SaveChangesAsync();
-                var quiz = _db.Quiz.Where(q => (ulong)q.ServerId == id && q.IsActive).FirstOrDefault();
-                try
-                {
-                    await startQuiz.StartGame(quiz).ConfigureAwait(false); 
-                }
-                finally
-                {
-                    _hamTestService.RunningTests.TryRemove(id, out startQuiz);
-                }                
+                    try
+                    {
+                        await startQuiz.StartGame(quiz, numQuestions, testName).ConfigureAwait(false); 
+                    }
+                    finally
+                    {
+                        _hamTestService.RunningTests.TryRemove(id, out startQuiz);
+                    } 
+                }                                                        
             }
             else
             {
@@ -326,23 +327,6 @@ namespace SevenThree.Modules
             await ReplyAsync($"Imported {testName} into the database!");
         }        
 
-        private async Task<List<Questions>> GetRandomQuestions(int numQuestions, string testName)
-        {            
-            var questions = await _db.Questions.Include(q => q.Test).Where(q => q.Test.TestName == testName).ToListAsync();
-            var random = new Random();
-            var testQuestions = new List<Questions>();
-
-            for (int i = 0; i < numQuestions; i++)
-            {
-                var randQuestion = questions[random.Next(questions.Count)];
-                while (testQuestions.Contains(randQuestion))
-                {
-                    randQuestion = questions[random.Next(questions.Count)];
-                }
-                testQuestions.Add(randQuestion);
-            }
-
-            return testQuestions;
-        }        
+        
     }
 }

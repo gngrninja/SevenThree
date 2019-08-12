@@ -13,6 +13,7 @@ using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using System.Text;
 using System.IO;
+using SevenThree.Services;
 
 namespace SevenThree.Modules
 {
@@ -30,17 +31,17 @@ namespace SevenThree.Modules
         private readonly DiscordSocketClient _client;
         private readonly IGuild _guild;
         private readonly ITextChannel _channel;
-        private readonly List<Questions> _questions;
+        private List<Questions> _questions;
+        private readonly HamTestService _hamTestService;
         private List<Questions> _questionsAsked;
         private readonly IUser _user;        
-        private readonly int _totalQuestions;
+        private int _totalQuestions;
         private Quiz _quiz;
         private int _questionDelay;
         public bool ShouldStopTest { get; private set; }
         public Questions CurrentQuestion { get; private set; }
         public List<Tuple<char, Answer>> Answers { get; private set; }
         public Quiz Quiz { get; private set; }
-        private IUser _startedBy;
 
         public bool IsActive
         {
@@ -81,48 +82,46 @@ namespace SevenThree.Modules
         public QuizUtil(
             IGuild guild,
             ITextChannel channel,
-            List<Questions> questions,
             IServiceProvider services,
-            ulong id,
-            IUser startedBy            
+            ulong id           
         )
         {
             _logger = services.GetRequiredService<ILogger<CallAssociation>>();
             _client = services.GetRequiredService<DiscordSocketClient>();
             _db = services.GetRequiredService<SevenThreeContext>();
+            _hamTestService = services.GetRequiredService<HamTestService>();
 
             _guild = guild;
-            _questions = questions;
+            //_questions = questions;
             _channel = channel;  
             _id = id;              
-            _totalQuestions = questions.Count;
+            //_totalQuestions = questions.Count;
             _questionsAsked = new List<Questions>();   
             _questionDelay = 60000;    
-            _startedBy = startedBy;                            
+
+                                  
         }
 
         public QuizUtil(
             IGuild guild,
             IUser user,
-            List<Questions> questions,
             IServiceProvider services,
-            ulong id,
-            IUser startedBy
+            ulong id
         )
         {
             _logger = services.GetRequiredService<ILogger<CallAssociation>>();
             _client = services.GetRequiredService<DiscordSocketClient>();
             _db = services.GetRequiredService<SevenThreeContext>();
+            _hamTestService = services.GetRequiredService<HamTestService>();
 
             _guild = guild;
-            _questions = questions;
+            //_questions = questions;
             _user = user;       
             _id = id;   
-            _totalQuestions = questions.Count;
+            //_totalQuestions = questions.Count;
             _questionsAsked = new List<Questions>();        
             _isDmTest = true;    
-            _questionDelay = 60000;            
-            _startedBy = startedBy;
+            _questionDelay = 60000;                        
         }        
 
         public void SetServer(ulong discordServer)
@@ -136,9 +135,12 @@ namespace SevenThree.Modules
             IsActive = true;
         }      
 
-        public async Task StartGame(Quiz quiz)
+        public async Task StartGame(Quiz quiz, int numQuestions, string testName)
         {
-            Quiz = quiz;
+            Quiz = quiz;  
+            var testQuestions = await GetRandomQuestions(numQuestions, testName); 
+            _questions = testQuestions;    
+            _totalQuestions = _questions.Count();      
             while (!ShouldStopTest)
             {
                 if (_questions.Count == 0)
@@ -274,8 +276,8 @@ namespace SevenThree.Modules
             embed.WithAuthor(
                 new EmbedAuthorBuilder
                 {
-                    Name    = $"Test started by [{_startedBy.Username}]",
-                    IconUrl = _startedBy.GetAvatarUrl()    
+                    Name    = $"Test started by [{Quiz.StartedByName}]",
+                    IconUrl = Quiz.StartedByIconUrl    
                 }
             );
             embed.Title = $"Question: [{CurrentQuestion.QuestionSection}] From Test: [{CurrentQuestion.Test.TestName}]!";
@@ -575,10 +577,11 @@ namespace SevenThree.Modules
         }
 
         internal async Task StopQuiz()
-        {
+        {            
             //wrap quiz up here
-            ShouldStopTest = true;  
-            //_tokenSource.Cancel();
+            QuizUtil startQuiz = null;
+            _hamTestService.RunningTests.TryRemove(Id, out startQuiz);            
+            ShouldStopTest = true;              
             _client.MessageReceived -= ListenForAnswer;                                 
             var quiz = _db.Quiz.Where(q => q.QuizId == Quiz.QuizId).FirstOrDefault();  
             quiz.TimeEnded = DateTime.Now;
@@ -586,13 +589,20 @@ namespace SevenThree.Modules
             await _db.SaveChangesAsync();   
 
             var embed = new EmbedBuilder();
-            embed.Title = $"Results!";
+            embed.Title = $"Test -> [{CurrentQuestion.Test.TestName}] Results!";
             embed.WithColor(new Color(0, 255, 0));
-
             var sb = new StringBuilder();
+            sb.AppendLine($"Number of questions -> [**{_totalQuestions}**]");
+            embed.ThumbnailUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true";
+            embed.WithFooter(new EmbedFooterBuilder{
+                Text = "SevenThree, your local ham radio Discord bot!",
+                IconUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true"
+            });
             var users = await _db.UserAnswer.Where(u => u.Quiz.QuizId == Quiz.QuizId).ToListAsync();
             if (users != null)
             {                                
+                sb.AppendLine();
+                sb.AppendLine($"**__Leaderboard:__**");                
                 var userResults = await GetTopUsers();
                 if (userResults.Count > 0)
                 {
@@ -600,15 +610,121 @@ namespace SevenThree.Modules
                     foreach (var user in userResults)
                     {
                         i++;
-                        sb.AppendLine($"{i}. [{users.Where(u => (ulong)u.UserId == user.Item1).FirstOrDefault().UserName}] with [{user.Item2}]");   
+                        sb.AppendLine($"{GetNumberEmojiFromInt(i)}. [**{users.Where(u => (ulong)u.UserId == user.Item1).FirstOrDefault().UserName}**] with [**{user.Item2}**]");   
                     }
+                    sb.AppendLine();
+                    sb.AppendLine($"Thanks for taking the test! Happy learning.");
                     embed.Description = sb.ToString();
                     await SendReplyAsync(embed, false);
+                    
                     return;
                 }                
             }
-            embed.Description = "Nobody scored!";
+            embed.Description = "Nobody scored!";                        
             await SendReplyAsync(embed, false);
-        }        
+        }       
+        
+        public string GetNumberEmojiFromInt(int number)
+        {
+            string numberEmoji = string.Empty;
+            switch (number)
+            {
+                case 1:
+                {
+                    numberEmoji = ":one:";
+                    break;
+                }
+                case 2:
+                {
+                    numberEmoji = ":two:";
+                    break;
+                }
+                case 3:
+                {
+                    numberEmoji = ":three:";
+                    break;
+                }
+                case 4:
+                {
+                    numberEmoji = ":four:";
+                    break;
+                }
+                case 5:
+                {
+                    numberEmoji = ":five:";
+                    break;
+                }
+                case 6:
+                {
+                    numberEmoji = ":six:";
+                    break;
+                }
+                case 7:
+                {
+                    numberEmoji = ":seven:";
+                    break;
+                }
+                case 8:
+                {
+                    numberEmoji = ":eight:";
+                    break;
+                }
+                case 9:
+                {
+                    numberEmoji = ":nine:";
+                    break;
+                }
+                case 10:
+                {
+                    numberEmoji = ":one::zero:";
+                    break;
+                }
+                case 11:
+                {
+                    numberEmoji = ":one::one:";
+                    break;
+                }
+                case 12:
+                {
+                    numberEmoji = ":one::two:";
+                    break;
+                }
+                case 13:
+                {
+                    numberEmoji = ":one::three:";
+                    break;
+                }
+                case 14:
+                {
+                    numberEmoji = ":one::four:";
+                    break;
+                }
+                default:
+                {
+                    numberEmoji = ":zero:";
+                    break;
+                }                                                                                                                                                                                
+            }
+            return numberEmoji;
+        } 
+
+        private async Task<List<Questions>> GetRandomQuestions(int numQuestions, string testName)
+        {            
+            var questions = await _db.Questions.Include(q => q.Test).Where(q => q.Test.TestName == testName).ToListAsync();
+            var random = new Random();
+            var testQuestions = new List<Questions>();
+
+            for (int i = 0; i < numQuestions; i++)
+            {
+                var randQuestion = questions[random.Next(questions.Count)];
+                while (testQuestions.Contains(randQuestion))
+                {
+                    randQuestion = questions[random.Next(questions.Count)];
+                }
+                testQuestions.Add(randQuestion);
+            }
+
+            return testQuestions;
+        }                
     }
 }

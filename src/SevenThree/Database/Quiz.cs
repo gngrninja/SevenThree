@@ -13,6 +13,8 @@ namespace SevenThree.Database
         public bool IsActive { get; set; }
         public DateTime TimeStarted { get; set; }
         public DateTime TimeEnded { get; set; }
-
+        public long StartedById { get; set; }
+        public string StartedByName { get; set; }
+        public string StartedByIconUrl { get; set; }
     }
 }
