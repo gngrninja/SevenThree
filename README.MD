@@ -3,10 +3,12 @@
 # SevenThree
 SevenThree (v0.1) is a ham radio Discord bot. You can use SevenThree to lookup call signs, as well take practice tests with the technician, general, or extra class question pools!
 
-This is a very early revision of the bot, more features and changes will be coming!
+This is a very early revision of the bot, more features and changes will be coming.
 
 # Invite to your server
 If you'd like to try out the bot on your server, use this invite link: https://discordapp.com/oauth2/authorize?client_id=576992584602353684&scope=bot&permissions=52224
+
+It will need permissions to read chat (so you can issue commands), post messages/embeds, and upload images(for questions that have diagrams associated with them).
 
 # Help!
 ### Start a gamified test in a Discord channel
