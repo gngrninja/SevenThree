@@ -366,7 +366,11 @@ namespace SevenThree.Modules
             if (!_isDmTest)
             {
                 answerText.AppendLine("Please wait until the next question to try again.");
-            }            
+            }  
+            else
+            {
+                answerText.AppendLine($"The correct answer was [{Answers.Where(a => a.Item2.IsAnswer).FirstOrDefault().Item1}] -> [{Answers.Where(a => a.Item2.IsAnswer).FirstOrDefault().Item2.AnswerText}]");
+            }          
             await msg?.Author.SendMessageAsync(answerText.ToString());
             _db.UserAnswer.Add(new UserAnswer
             {
