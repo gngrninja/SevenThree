@@ -40,7 +40,7 @@ namespace SevenThree.Modules
         public Questions CurrentQuestion { get; private set; }
         public List<Tuple<char, Answer>> Answers { get; private set; }
         public Quiz Quiz { get; private set; }
-        private IGuildUser _startedBy;
+        private IUser _startedBy;
 
         public bool IsActive
         {
@@ -84,7 +84,7 @@ namespace SevenThree.Modules
             List<Questions> questions,
             IServiceProvider services,
             ulong id,
-            IGuildUser startedBy            
+            IUser startedBy            
         )
         {
             _logger = services.GetRequiredService<ILogger<CallAssociation>>();
@@ -107,7 +107,7 @@ namespace SevenThree.Modules
             List<Questions> questions,
             IServiceProvider services,
             ulong id,
-            IGuildUser startedBy
+            IUser startedBy
         )
         {
             _logger = services.GetRequiredService<ILogger<CallAssociation>>();

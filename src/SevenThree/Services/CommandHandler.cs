@@ -65,10 +65,15 @@ namespace SevenThree.Services
 
             // get prefix from the configuration file
             char prefix = Char.Parse(_config["Prefix"]);
-           
+                       
             var context = new SocketCommandContext(_client, message);
-            var serverPrefix = GetPrefix((long)context.Guild.Id); 
 
+            PrefixList serverPrefix = null;
+            if (!(context.Channel is IDMChannel))
+            {
+                serverPrefix = GetPrefix((long)context.Guild.Id); 
+            }
+            
             if (serverPrefix != null)
             {
                 prefix = serverPrefix.Prefix;
