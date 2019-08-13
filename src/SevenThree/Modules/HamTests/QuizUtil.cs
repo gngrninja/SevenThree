@@ -580,6 +580,8 @@ namespace SevenThree.Modules
         internal async Task StopQuiz()
         {            
             //wrap quiz up here           
+            QuizUtil trivia = null;
+            _hamTestService.RunningTests.TryRemove(Id, out trivia);
             ShouldStopTest = true;              
             _client.MessageReceived -= ListenForAnswer;                                 
             var quiz = _db.Quiz.Where(q => q.QuizId == Quiz.QuizId).FirstOrDefault();  

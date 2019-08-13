@@ -127,18 +127,20 @@ namespace SevenThree.Modules
                 }
                 else
                 {
-                    await ReplyAsync("There is already an active quiz (dictionary)!");
+                    _logger.LogInformation($"server n{Context.Guild.Name} i{Context.Guild.Id} -> Dictionary");
+                    await ReplyAsync("There is already an active quiz!");
                 }        
             }     
             else
             {
-                await ReplyAsync("There is already an active quiz (db)!");
+                _logger.LogInformation($"server n{Context.Guild.Name} i{Context.Guild.Id} -> DB");
+                await ReplyAsync("There is already an active quiz!");
             }                      
         }
 
         [Command("stop", RunMode = RunMode.Async)]
         public async Task StopQuiz([Remainder]string args = null)
-        {                   
+        {                               
             ulong id;            
             if (Context.Channel is IDMChannel)
             {
@@ -148,15 +150,26 @@ namespace SevenThree.Modules
             {
                 id = (ulong)Context.Guild.Id;                
             }   
+            var quiz = await _db.Quiz.Where(q => q.ServerId == Context.Guild.Id && q.IsActive).FirstOrDefaultAsync();        
             QuizUtil trivia = null;
-            if (_hamTestService.RunningTests.TryRemove(id, out trivia))
-            {                
-                await trivia.StopQuiz().ConfigureAwait(false);                                
-            }
+
+            var gUser = Context.User as IGuildUser;
+            
+            if (quiz != null && (long)Context.User.Id == quiz.StartedById || gUser.GuildPermissions.KickMembers)
+            {
+                if (_hamTestService.RunningTests.TryRemove(id, out trivia))
+                {                
+                    await trivia.StopQuiz().ConfigureAwait(false);                                
+                }
+                else
+                {
+                    await ReplyAsync("No quiz to end!");
+                }     
+            } 
             else
             {
-                await ReplyAsync("No quiz to end!");
-            }      
+                await ReplyAsync($"Sorry, {Context.User.Mention}, a test can only be stopped by the person who started it, or by someone with at least **KickMembers** permissions in {Context.Guild.Name}!");
+            }
         }                
 
         [Command("import", RunMode = RunMode.Async)]
