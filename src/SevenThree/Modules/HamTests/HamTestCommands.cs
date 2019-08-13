@@ -115,23 +115,15 @@ namespace SevenThree.Modules
                 }
                 if (_hamTestService.RunningTests.TryAdd(id, startQuiz))
                 {   
-                    await ReplyAsync($"ID = {id}");
-                    foreach (var key in _hamTestService.RunningTests.Keys)
-                    {
-                        await ReplyAsync($"key in array -> {key}");
-                    }
                     var quiz = await _db.Quiz.Where(q => q.ServerId == id && q.IsActive).FirstOrDefaultAsync();
                     try
                     {
                         await startQuiz.StartGame(quiz, numQuestions, testName, quesitonDelay * 1000).ConfigureAwait(false); 
                     }
-                    finally
+                    catch (Exception ex)
                     {
-                        System.Console.WriteLine("finally");
-                        _hamTestService.RunningTests.TryRemove(id, out startQuiz);
-                        await startQuiz.StopQuiz().ConfigureAwait(false);
-                    } 
-                                                                        
+                        _logger.LogError($"{ex.Message}");
+                    }                                                     
                 }
                 else
                 {
