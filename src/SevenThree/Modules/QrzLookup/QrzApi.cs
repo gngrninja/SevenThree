@@ -11,6 +11,8 @@ using SevenThree.Models;
 using SevenThree.Services;
 using System.Text;
 using System.IO;
+using SevenThree.Database;
+using System.Linq;
 
 namespace SevenThree.Modules
 {
@@ -27,6 +29,7 @@ namespace SevenThree.Modules
         private string _apiKey;
         private readonly SecurityServices _secure;
         private readonly NetworkCredential _creds;
+        private readonly SevenThreeContext _db;
 
         public QrzApi(IServiceProvider services)
         {
@@ -34,12 +37,16 @@ namespace SevenThree.Modules
             _secure = services.GetRequiredService<SecurityServices>();
             _logger = services.GetRequiredService<ILogger<QrzApi>>();
             _xmlService = services.GetRequiredService<XmlServices>();
+            _db = services.GetRequiredService<SevenThreeContext>();
+
                     
             _baseUrl = "https://xmldata.qrz.com/xml/current";
-            System.Console.WriteLine("user");
-            _userName = Console.ReadLine();
-                        
-            System.Console.WriteLine("password");
+
+            var creds = _db.Cred.FirstOrDefault();
+            //System.Console.WriteLine("user");
+            _userName = creds.User;                        
+            //System.Console.WriteLine("password");
+            /* 
             while (true)
             {
                 var key = System.Console.ReadKey(true);
@@ -49,13 +56,13 @@ namespace SevenThree.Modules
                 }
                 _password += key.KeyChar;
             }
+            */
             
-            
-            _creds = _secure.ConvertToSecure(username: _userName, password: _password);
+            _creds = _secure.ConvertToSecure(username: _userName, password: creds.Pass);
 
             _password = null;
             _userName = null;
-
+            creds = null;            
 
             _apiKey = this.GetKey().Result;
             _sessionCheckUrl = $"{_baseUrl}/?s={_apiKey};callsign=kf7ign";

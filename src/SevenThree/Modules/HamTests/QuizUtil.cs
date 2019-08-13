@@ -37,6 +37,7 @@ namespace SevenThree.Modules
         private readonly IUser _user;        
         private int _totalQuestions;
         private Quiz _quiz;
+        private bool _wasAnswered;
         private int _questionDelay;
         public bool ShouldStopTest { get; private set; }
         public Questions CurrentQuestion { get; private set; }
@@ -97,9 +98,7 @@ namespace SevenThree.Modules
             _id = id;              
             //_totalQuestions = questions.Count;
             _questionsAsked = new List<Questions>();   
-            _questionDelay = 60000;    
-
-                                  
+            _questionDelay = 60000;                                      
         }
 
         public QuizUtil(
@@ -135,8 +134,9 @@ namespace SevenThree.Modules
             IsActive = true;
         }      
 
-        public async Task StartGame(Quiz quiz, int numQuestions, string testName)
+        public async Task StartGame(Quiz quiz, int numQuestions, string testName, int questionDelay)
         {
+            _questionDelay = questionDelay;
             Quiz = quiz;  
             var testQuestions = await GetRandomQuestions(numQuestions, testName); 
             _questions = testQuestions;    
@@ -147,7 +147,7 @@ namespace SevenThree.Modules
                 {
                     await StopQuiz().ConfigureAwait(false);
                     return;
-                } 
+                }          
                 _tokenSource = new CancellationTokenSource();
                 var random = new Random();
                 CurrentQuestion = _questions[random.Next(_questions.Count)];               
@@ -165,44 +165,48 @@ namespace SevenThree.Modules
                     
                     if (!string.IsNullOrEmpty(CurrentQuestion.FigureName))
                     {
-                        await SendReplyAsync(embed, true);
+                        await SendReplyAsync(embed, true).ConfigureAwait(false);
                     }
                     else
                     {
-                        await SendReplyAsync(embed, false);
+                        await SendReplyAsync(embed, false).ConfigureAwait(false);
                     }                                                            
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex.Message);
-                }   
+                    await Task.Delay(5000).ConfigureAwait(false);
+                    continue;
+                }                        
                 try 
-                {                    
+                {                
+                    //listen for answers    
                     _client.MessageReceived += ListenForAnswer;
                     IsActive = true;
                     try
                     {                        
-                        await Task.Delay(_questionDelay, _tokenSource.Token).ConfigureAwait(false);
-                        await NoAnswer().ConfigureAwait(false);
+                        await Task.Delay(_questionDelay, _tokenSource.Token).ConfigureAwait(false);                        
                     }        
                     catch (TaskCanceledException)
                     {
-                        //IsActive = false;
-                        Thread.Sleep(5000);
+                        //answered correctly                       
                     }
                 }   
                 finally
-                {
+                {     
                     _client.MessageReceived -= ListenForAnswer;
-                    IsActive = false;
+                    IsActive = false;                         
                 }
+                if (!_tokenSource.IsCancellationRequested)
+                {       
+                    await NoAnswer().ConfigureAwait(false);                    
+                }
+                await Task.Delay(5000).ConfigureAwait(false);
             }                                        
         }
 
         private async Task NoAnswer()
-        {
-            IsActive = false;
-
+        {            
             //actions if the timer expires and no one answered
             _client.MessageReceived -= ListenForAnswer;
 
@@ -577,7 +581,8 @@ namespace SevenThree.Modules
         {            
             //wrap quiz up here
             QuizUtil startQuiz = null;
-            _hamTestService.RunningTests.TryRemove(Id, out startQuiz);            
+            _hamTestService.RunningTests.TryRemove(Id, out startQuiz);
+            
             ShouldStopTest = true;              
             _client.MessageReceived -= ListenForAnswer;                                 
             var quiz = _db.Quiz.Where(q => q.QuizId == Quiz.QuizId).FirstOrDefault();  
@@ -607,7 +612,7 @@ namespace SevenThree.Modules
                     foreach (var user in userResults)
                     {
                         i++;
-                        sb.AppendLine($"{GetNumberEmojiFromInt(i)}. [**{users.Where(u => (ulong)u.UserId == user.Item1).FirstOrDefault().UserName}**] with [**{user.Item2}**]");   
+                        sb.AppendLine($"{GetNumberEmojiFromInt(i)} [**{users.Where(u => (ulong)u.UserId == user.Item1).FirstOrDefault().UserName}**] with [**{user.Item2}**]");   
                     }
                     sb.AppendLine();
                     sb.AppendLine($"Thanks for taking the test! Happy learning.");

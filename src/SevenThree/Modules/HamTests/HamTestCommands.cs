@@ -36,7 +36,7 @@ namespace SevenThree.Modules
         }
 
         [Command("start", RunMode = RunMode.Async)]
-        public async Task StartQuiz(string args, int numQuestions = 35, [Remainder]string directMessage = null)
+        public async Task StartQuiz(string args, int numQuestions = 35, int quesitonDelay = 60000, [Remainder]string directMessage = null)
         {                 
             if (args == null)
             {
@@ -113,7 +113,7 @@ namespace SevenThree.Modules
                 {
                     try
                     {
-                        await startQuiz.StartGame(quiz, numQuestions, testName).ConfigureAwait(false); 
+                        await startQuiz.StartGame(quiz, numQuestions, testName, quesitonDelay).ConfigureAwait(false); 
                     }
                     finally
                     {
