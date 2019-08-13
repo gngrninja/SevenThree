@@ -36,7 +36,7 @@ namespace SevenThree.Modules
         }
 
         [Command("start", RunMode = RunMode.Async)]
-        public async Task StartQuiz(string args, int numQuestions = 35, int quesitonDelay = 60000, [Remainder]string directMessage = null)
+        public async Task StartQuiz(string args, int numQuestions = 35, int quesitonDelay = 60, [Remainder]string directMessage = null)
         {                 
             if (args == null)
             {
@@ -75,56 +75,73 @@ namespace SevenThree.Modules
             else
             {
                 id = Context.Guild.Id;                
-            }               
-            await _db.Quiz.AddAsync(
-                new Quiz
-                {
-                    ServerId = id,
-                    IsActive = true,
-                    TimeStarted = DateTime.Now,
-                    StartedById = (long)Context.User.Id,
-                    StartedByName = Context.User.Username,
-                    StartedByIconUrl = Context.User.GetAvatarUrl()
-                });
-            await _db.SaveChangesAsync();
-            QuizUtil startQuiz = null;
-            if (Context.Channel is IDMChannel || directMessage != null)
-            {
-                startQuiz = new QuizUtil(
-                    user: Context.User as IUser,
-                    services: _services,
-                    guild: Context.Guild as IGuild,
-                    id: id
-                );
             }
-            else
+            if (quesitonDelay > 120)
             {
-                startQuiz = new QuizUtil(
-                    channel: Context.Channel as ITextChannel,
-                    services: _services,
-                    guild: Context.Guild as IGuild,
-                    id: id
-                );
+                quesitonDelay = 120;
             }
-            if (_hamTestService.RunningTests.TryAdd(id, startQuiz))
-            {   
-                var quiz = _db.Quiz.Where(q => (ulong)q.ServerId == id && q.IsActive).FirstOrDefault();   
-                if (quiz != null)
+            var checkQuiz = _db.Quiz.Where(q => q.ServerId == id && q.IsActive).FirstOrDefault();
+            if (checkQuiz == null)
+            {
+                await _db.Quiz.AddAsync(
+                    new Quiz
+                    {
+                        ServerId = id,
+                        IsActive = true,
+                        TimeStarted = DateTime.Now,
+                        StartedById = (long)Context.User.Id,
+                        StartedByName = Context.User.Username,
+                        StartedByIconUrl = Context.User.GetAvatarUrl()
+                    });
+                await _db.SaveChangesAsync();
+                QuizUtil startQuiz = null;
+                if (Context.Channel is IDMChannel || directMessage != null)
                 {
+                    startQuiz = new QuizUtil(
+                        user: Context.User as IUser,
+                        services: _services,
+                        guild: Context.Guild as IGuild,
+                        id: id
+                    );
+                }
+                else
+                {
+                    startQuiz = new QuizUtil(
+                        channel: Context.Channel as ITextChannel,
+                        services: _services,
+                        guild: Context.Guild as IGuild,
+                        id: id
+                    );
+                }
+                if (_hamTestService.RunningTests.TryAdd(id, startQuiz))
+                {   
+                    await ReplyAsync($"ID = {id}");
+                    foreach (var key in _hamTestService.RunningTests.Keys)
+                    {
+                        await ReplyAsync($"key in array -> {key}");
+                    }
+                    var quiz = await _db.Quiz.Where(q => q.ServerId == id && q.IsActive).FirstOrDefaultAsync();
                     try
                     {
-                        await startQuiz.StartGame(quiz, numQuestions, testName, quesitonDelay).ConfigureAwait(false); 
+                        await startQuiz.StartGame(quiz, numQuestions, testName, quesitonDelay * 1000).ConfigureAwait(false); 
                     }
                     finally
                     {
+                        System.Console.WriteLine("finally");
                         _hamTestService.RunningTests.TryRemove(id, out startQuiz);
+                        await startQuiz.StopQuiz().ConfigureAwait(false);
                     } 
-                }                                                        
-            }
+                                                                        
+                }
+                else
+                {
+                    await ReplyAsync("There is already an active quiz (dictionary)!");
+                }        
+            }     
             else
             {
-                await ReplyAsync("There is already an active quiz!");
-            }        
+                await ReplyAsync("There is already an active quiz (db)!");
+            }                      
         }
 
         [Command("stop", RunMode = RunMode.Async)]

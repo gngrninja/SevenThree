@@ -40,7 +40,7 @@ namespace SevenThree.Services
                     {
                         _db.Remove(answer);
                     }
-                }                
+                }                                
             }
             await _db.SaveChangesAsync();                        
         }

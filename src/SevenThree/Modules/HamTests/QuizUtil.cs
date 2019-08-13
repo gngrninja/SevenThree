@@ -140,7 +140,7 @@ namespace SevenThree.Modules
             Quiz = quiz;  
             var testQuestions = await GetRandomQuestions(numQuestions, testName); 
             _questions = testQuestions;    
-            _totalQuestions = _questions.Count();      
+            _totalQuestions = _questions.Count();                  
             while (!ShouldStopTest)
             {
                 if (_questions.Count == 0)
@@ -197,9 +197,9 @@ namespace SevenThree.Modules
                     _client.MessageReceived -= ListenForAnswer;
                     IsActive = false;                         
                 }
-                if (!_tokenSource.IsCancellationRequested)
+                if (!_tokenSource.IsCancellationRequested && !IsActive && !ShouldStopTest)
                 {       
-                    await NoAnswer().ConfigureAwait(false);                    
+                    await NoAnswer();                    
                 }
                 await Task.Delay(5000).ConfigureAwait(false);
             }                                        
@@ -579,17 +579,13 @@ namespace SevenThree.Modules
 
         internal async Task StopQuiz()
         {            
-            //wrap quiz up here
-            QuizUtil startQuiz = null;
-            _hamTestService.RunningTests.TryRemove(Id, out startQuiz);
-            
+            //wrap quiz up here           
             ShouldStopTest = true;              
             _client.MessageReceived -= ListenForAnswer;                                 
             var quiz = _db.Quiz.Where(q => q.QuizId == Quiz.QuizId).FirstOrDefault();  
             quiz.TimeEnded = DateTime.Now;
             quiz.IsActive = false;
             await _db.SaveChangesAsync();   
-
             var embed = new EmbedBuilder();
             embed.Title = $"Test -> [{CurrentQuestion.Test.TestName}] Results!";
             embed.WithColor(new Color(0, 255, 0));
@@ -715,7 +711,10 @@ namespace SevenThree.Modules
             var questions = await _db.Questions.Include(q => q.Test).Where(q => q.Test.TestName == testName).ToListAsync();
             var random = new Random();
             var testQuestions = new List<Questions>();
-
+            if (numQuestions > 100)
+            {
+                numQuestions = 100;
+            }
             for (int i = 0; i < numQuestions; i++)
             {
                 var randQuestion = questions[random.Next(questions.Count)];
