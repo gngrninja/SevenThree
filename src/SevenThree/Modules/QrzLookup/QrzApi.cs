@@ -99,6 +99,38 @@ namespace SevenThree.Modules
             }
         }
 
+        public async Task<QrzApiXml.QRZDatabase> GetDxccInfo(string dxcc)
+        {
+            string result = string.Empty;
+            using (var client = new HttpClient())
+            {
+                HttpResponseMessage response = null;
+                try 
+                {
+                    response = client.GetAsync($"{_baseUrl}/?s={_apiKey};dxcc={dxcc}").Result;
+                }
+                catch
+                {
+                    await GetKey();
+                    response = client.GetAsync($"{_baseUrl}/?s={_apiKey};dxcc={dxcc}").Result;
+                }
+                finally
+                {
+                    result = response.Content.ReadAsStringAsync().Result;
+                }                
+            }
+
+            _logger.LogInformation(result);
+
+            var byteArray = Encoding.UTF8.GetBytes(result);
+            using (var sr = new StreamReader(new MemoryStream(byteArray)))
+            {
+                _qrzApi = new XmlServices().GetQrzResultFromString(sr);
+            }  
+
+            return _qrzApi;            
+        }
+        
         public async Task<QrzApiXml.QRZDatabase> GetCallInfo(string callsign)
         {
             string result = string.Empty;
