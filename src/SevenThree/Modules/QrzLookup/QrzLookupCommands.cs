@@ -36,7 +36,6 @@ namespace SevenThree.Modules
                 callSignLong = callsign.Replace("/", "");
                 callsign = callsign.Split('/')[0].Trim();                
             }    
-
             if (!string.IsNullOrEmpty(callSignLong))
             {
                 result = await _qrzApi.GetCallInfo(callSignLong);
@@ -47,7 +46,7 @@ namespace SevenThree.Modules
             }
             else
             {
-                result = await _qrzApi.GetCallInfo(callSignLong);
+                result = await _qrzApi.GetCallInfo(callsign);
             }
 
             var embed = new EmbedBuilder();
