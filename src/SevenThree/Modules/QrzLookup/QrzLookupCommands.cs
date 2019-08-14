@@ -87,11 +87,14 @@ namespace SevenThree.Modules
                 });
             }
 
-            embed.Fields.Add(new EmbedFieldBuilder{
-                Name = "Timezone",
-                Value = $"{result.Callsign.TimeZone}",
-                IsInline = true
-            });
+            if (result.Callsign.TimeZone != null)
+            {
+                embed.Fields.Add(new EmbedFieldBuilder{
+                    Name = "Timezone",
+                    Value = $"{result.Callsign.TimeZone}",
+                    IsInline = true
+                });
+            }
 
             if (result.Callsign.Efdate != null)
             {
