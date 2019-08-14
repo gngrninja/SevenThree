@@ -38,12 +38,16 @@ namespace SevenThree.Modules
                 Value = $"{result.Callsign.Fname} {result.Callsign.Name}",
                 IsInline = true
             }); 
-            embed.Fields.Add(new EmbedFieldBuilder{
-                Name = "Class",
-                Value = result.Callsign.Class,
-                IsInline = true
-            });            
-            
+
+            if (result.Callsign.Class != null)
+            {
+                embed.Fields.Add(new EmbedFieldBuilder{
+                    Name = "Class",
+                    Value = result.Callsign.Class,
+                    IsInline = true
+                });         
+            }
+               
             embed.Fields.Add(new EmbedFieldBuilder{
                 Name = "Profile Views",
                 Value = result.Callsign.U_views,
@@ -68,17 +72,23 @@ namespace SevenThree.Modules
                 IsInline = true
             });
 
-            embed.Fields.Add(new EmbedFieldBuilder{
-                Name = "License Granted",
-                Value = $"{result.Callsign.Efdate}",
-                IsInline = true
-            });
+            if (result.Callsign.Efdate != null)
+            {
+                embed.Fields.Add(new EmbedFieldBuilder{
+                    Name = "License Granted",
+                    Value = $"{result.Callsign.Efdate}",
+                    IsInline = true
+                });
+            } 
 
-            embed.Fields.Add(new EmbedFieldBuilder{
-                Name = "License Expires",
-                Value = $"{result.Callsign.Expdate}",
-                IsInline = true
-            });
+            if (result.Callsign.Expdate != null)
+            {
+                embed.Fields.Add(new EmbedFieldBuilder{
+                    Name = "License Expires",
+                    Value = $"{result.Callsign.Expdate}",
+                    IsInline = true
+                });
+            }
 
             embed.Fields.Add(new EmbedFieldBuilder{
                 Name = "QRZ Profile Link",
