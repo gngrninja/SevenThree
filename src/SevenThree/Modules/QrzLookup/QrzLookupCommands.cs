@@ -32,114 +32,127 @@ namespace SevenThree.Modules
             if (callsign.Contains("/"))
             {
                 callsign = callsign.Replace("/","");
-            }            
+            }    
+
             var result = await _qrzApi.GetCallInfo(callsign);
             var embed = new EmbedBuilder();
-            embed.Title = $"{result.Callsign.Url}Callsign information for {result.Callsign.Call}";
 
-            if (result.Callsign.Fname != null && result.Callsign.Name != null)
-            {
-                embed.Fields.Add(new EmbedFieldBuilder{
-                    Name = "Name",
-                    Value = $"{result.Callsign.Fname} {result.Callsign.Name}",
-                    IsInline = true
-                }); 
-            }
+            if (result.Session.Error != null)
+            {                
+                embed.Title = $"Callsign information for [{result.Callsign.Call}]";
 
-            if (result.Callsign.Class != null)
-            {
+                if (result.Callsign.Fname != null && result.Callsign.Name != null)
+                {
+                    embed.Fields.Add(new EmbedFieldBuilder{
+                        Name = "Name",
+                        Value = $"{result.Callsign.Fname} {result.Callsign.Name}",
+                        IsInline = true
+                    }); 
+                }
+
+                if (result.Callsign.Class != null)
+                {
+                    embed.Fields.Add(new EmbedFieldBuilder{
+                        Name = "Class",
+                        Value = result.Callsign.Class,
+                        IsInline = true
+                    });         
+                }
+                
+                if (result.Callsign.U_views != null)
+                {
+                    embed.Fields.Add(new EmbedFieldBuilder{
+                        Name = "Profile Views",
+                        Value = result.Callsign.U_views,
+                        IsInline = true
+                    });
+                }   
+
+                if (result.Callsign.Lat != null && result.Callsign.Lon != null)
+                {
+                    embed.Fields.Add(new EmbedFieldBuilder{
+                        Name = "Lat/Long",
+                        Value = $"{result.Callsign.Lat}/{result.Callsign.Lon}",
+                        IsInline = true
+                    });
+                }
+
+                if (result.Callsign.Land != null)
+                {
+                    embed.Fields.Add(new EmbedFieldBuilder{
+                        Name = "Country",
+                        Value = $"{result.Callsign.Land}",
+                        IsInline = true
+                    });
+                }
+                else if (result.Callsign.Country != null)
+                {
+                    embed.Fields.Add(new EmbedFieldBuilder{
+                        Name = "Country",
+                        Value = $"{result.Callsign.Land}",
+                        IsInline = true
+                    });
+                }
+
+                if (result.Callsign.TimeZone != null)
+                {
+                    embed.Fields.Add(new EmbedFieldBuilder{
+                        Name = "Timezone",
+                        Value = $"{result.Callsign.TimeZone}",
+                        IsInline = true
+                    });
+                }
+
+                if (result.Callsign.Efdate != null)
+                {
+                    embed.Fields.Add(new EmbedFieldBuilder{
+                        Name = "License Granted",
+                        Value = $"{result.Callsign.Efdate}",
+                        IsInline = true
+                    });
+                } 
+
+                if (result.Callsign.Expdate != null)
+                {
+                    embed.Fields.Add(new EmbedFieldBuilder{
+                        Name = "License Expires",
+                        Value = $"{result.Callsign.Expdate}",
+                        IsInline = true
+                    });
+                }
+
                 embed.Fields.Add(new EmbedFieldBuilder{
-                    Name = "Class",
-                    Value = result.Callsign.Class,
-                    IsInline = true
-                });         
-            }
-               
-            if (result.Callsign.U_views != null)
-            {
-                embed.Fields.Add(new EmbedFieldBuilder{
-                    Name = "Profile Views",
-                    Value = result.Callsign.U_views,
-                    IsInline = true
+                    Name = "QRZ Profile Link",
+                    Value = $"https://qrz.com/db/{result.Callsign.Call}"
                 });
-            }   
 
-            if (result.Callsign.Lat != null && result.Callsign.Lon != null)
-            {
-                embed.Fields.Add(new EmbedFieldBuilder{
-                    Name = "Lat/Long",
-                    Value = $"{result.Callsign.Lat}/{result.Callsign.Lon}",
-                    IsInline = true
-                });
+                if (!string.IsNullOrEmpty(result.Callsign.Image))
+                {
+                    embed.ImageUrl     = result.Callsign.Image;                
+                    embed.ThumbnailUrl = result.Callsign.Image;
+                
+                }
+                else
+                {
+                    embed.ThumbnailUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true"; 
+                } 
+                embed.WithColor(new Color(0, 255, 50));
             }
-
-            if (result.Callsign.Land != null)
+            else 
             {
-                embed.Fields.Add(new EmbedFieldBuilder{
-                    Name = "Country",
-                    Value = $"{result.Callsign.Land}",
-                    IsInline = true
-                });
+                embed.Title = $"Error looking up [{callsign}]";
+                embed.WithColor(new Color(255, 0, 0));
+                embed.Description = $"Details -> [{result.Session.Error}]!";
             }
-            else if (result.Callsign.Country != null)
-            {
-                embed.Fields.Add(new EmbedFieldBuilder{
-                    Name = "Country",
-                    Value = $"{result.Callsign.Land}",
-                    IsInline = true
-                });
-            }
-
-            if (result.Callsign.TimeZone != null)
-            {
-                embed.Fields.Add(new EmbedFieldBuilder{
-                    Name = "Timezone",
-                    Value = $"{result.Callsign.TimeZone}",
-                    IsInline = true
-                });
-            }
-
-            if (result.Callsign.Efdate != null)
-            {
-                embed.Fields.Add(new EmbedFieldBuilder{
-                    Name = "License Granted",
-                    Value = $"{result.Callsign.Efdate}",
-                    IsInline = true
-                });
-            } 
-
-            if (result.Callsign.Expdate != null)
-            {
-                embed.Fields.Add(new EmbedFieldBuilder{
-                    Name = "License Expires",
-                    Value = $"{result.Callsign.Expdate}",
-                    IsInline = true
-                });
-            }
-
-            embed.Fields.Add(new EmbedFieldBuilder{
-                Name = "QRZ Profile Link",
-                Value = $"https://qrz.com/db/{result.Callsign.Call}"
-            });
-
-            embed.WithColor(new Color(0, 255, 50));
-
-            if (!string.IsNullOrEmpty(result.Callsign.Image))
-            {
-                embed.ImageUrl     = result.Callsign.Image;                
-                embed.ThumbnailUrl = result.Callsign.Image;
-            
-            }
-            else
-            {
-               embed.ThumbnailUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true"; 
-            } 
+                       
             embed.WithAuthor(
                 new EmbedAuthorBuilder
-            {
+                {
                     Name = $"Callsign looked up by [{Context.User.Username}]!",
                     IconUrl = Context.User.GetAvatarUrl()
-            });         
+                }
+            );     
+
             embed.WithFooter(
                 new EmbedFooterBuilder
                 {
@@ -147,6 +160,7 @@ namespace SevenThree.Modules
                     IconUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true"
                 }
             );
+
             await ReplyAsync(null, false, embed.Build()); 
         }
     }
