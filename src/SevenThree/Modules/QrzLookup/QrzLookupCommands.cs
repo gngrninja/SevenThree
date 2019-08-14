@@ -33,11 +33,14 @@ namespace SevenThree.Modules
             var embed = new EmbedBuilder();
             embed.Title = $"{result.Callsign.Url}Callsign information for {result.Callsign.Call}";
 
-            embed.Fields.Add(new EmbedFieldBuilder{
-                Name = "Name",
-                Value = $"{result.Callsign.Fname} {result.Callsign.Name}",
-                IsInline = true
-            }); 
+            if (result.Callsign.Fname != null && result.Callsign.Name != null)
+            {
+                embed.Fields.Add(new EmbedFieldBuilder{
+                    Name = "Name",
+                    Value = $"{result.Callsign.Fname} {result.Callsign.Name}",
+                    IsInline = true
+                }); 
+            }
 
             if (result.Callsign.Class != null)
             {
@@ -48,23 +51,41 @@ namespace SevenThree.Modules
                 });         
             }
                
-            embed.Fields.Add(new EmbedFieldBuilder{
-                Name = "Profile Views",
-                Value = result.Callsign.U_views,
-                IsInline = true
-            });
 
-            embed.Fields.Add(new EmbedFieldBuilder{
-                Name = "Lat/Long",
-                Value = $"{result.Callsign.Lat}/{result.Callsign.Lon}",
-                IsInline = true
-            });
+            if (result.Callsign.U_views != null)
+            {
+                embed.Fields.Add(new EmbedFieldBuilder{
+                    Name = "Profile Views",
+                    Value = result.Callsign.U_views,
+                    IsInline = true
+                });
+            }   
 
-            embed.Fields.Add(new EmbedFieldBuilder{
-                Name = "Country",
-                Value = $"{result.Callsign.Land}",
-                IsInline = true
-            });
+            if (result.Callsign.Lat != null && result.Callsign.Long != null)
+            {
+                embed.Fields.Add(new EmbedFieldBuilder{
+                    Name = "Lat/Long",
+                    Value = $"{result.Callsign.Lat}/{result.Callsign.Lon}",
+                    IsInline = true
+                });
+            }
+
+            if (result.Callsign.Land != null)
+            {
+                embed.Fields.Add(new EmbedFieldBuilder{
+                    Name = "Country",
+                    Value = $"{result.Callsign.Land}",
+                    IsInline = true
+                });
+            }
+            else if (result.Callsign.Country != null)
+            {
+                embed.Fields.Add(new EmbedFieldBuilder{
+                    Name = "Country",
+                    Value = $"{result.Callsign.Land}",
+                    IsInline = true
+                });
+            }
 
             embed.Fields.Add(new EmbedFieldBuilder{
                 Name = "Timezone",
