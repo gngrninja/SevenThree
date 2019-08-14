@@ -33,7 +33,7 @@ namespace SevenThree.Modules
             string callSignLong = string.Empty;
             if (callsign.Contains("/"))
             {
-                callSignLong = callsign.Replace("/", "");
+                callSignLong = callsign;
                 callsign = callsign.Split('/')[0].Trim();                
             }    
             if (!string.IsNullOrEmpty(callSignLong))
