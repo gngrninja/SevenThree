@@ -106,10 +106,37 @@ namespace SevenThree.Models
 			public string GMTime { get; set; }
 		}
 
+		[XmlRoot(ElementName="DXCC")]
+		public class DxccInfo
+		{
+			[XmlElement(ElementName="dxcc")]
+			public string Dxcc { get; set; }
+			[XmlElement(ElementName="cc")]
+			public string Cc { get; set; }
+			[XmlElement(ElementName="ccc")]
+			public string Ccc { get; set; }
+			[XmlElement(ElementName="name")]
+			public string Name { get; set; }
+			[XmlElement(ElementName="continent")]
+			public string Continent { get; set; }
+			[XmlElement(ElementName="ituzone")]
+			public string ItuZone { get; set; }		
+			[XmlElement(ElementName="cqzone")]
+			public string CqZone { get; set; }	
+			[XmlElement(ElementName="timezone")]
+			public string TimeZone { get; set; }
+			[XmlElement(ElementName="lat")]
+			public string Lat { get; set; }			
+			[XmlElement(ElementName="lon")]
+			public string Lon { get; set; }														
+		}
+
 		[XmlRoot(ElementName="QRZDatabase")]
 		public class QRZDatabase {
 			[XmlElement(ElementName="Callsign")]
 			public Callsign Callsign { get; set; }
+			[XmlElement(ElementName="DXCC")]
+			public DxccInfo DXCC { get; set; }
 			[XmlElement(ElementName="Session")]
 			public Session Session { get; set; }
 			[XmlAttribute(AttributeName="version")]

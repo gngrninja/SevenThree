@@ -27,6 +27,7 @@ namespace SevenThree.Modules
         }
 
         [Command("lookup")]
+        [Alias("qrz")]
         public async Task LookupCall([Remainder] string callsign)
         {
             Models.QrzApiXml.QRZDatabase result = null;
@@ -183,6 +184,80 @@ namespace SevenThree.Modules
             embed.ThumbnailUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true";
 
             await ReplyAsync(null, false, embed.Build()); 
+        }
+    
+        [Command("dxcc")]
+        public async Task FindDxcc([Remainder] string dxcc)
+        {
+            Models.QrzApiXml.QRZDatabase result = null;
+            string callSignLong = string.Empty;
+            if (dxcc.Contains("/"))
+            {
+                callSignLong = dxcc;
+                dxcc = dxcc.Split('/')[0].Trim();                
+            }    
+            if (!string.IsNullOrEmpty(callSignLong))
+            {
+                result = await _qrzApi.GetCallInfo(callSignLong);
+                if (result.Session.Error != null && result.Session.Error.Contains("Not found:"))
+                {
+                    result = await _qrzApi.GetCallInfo(dxcc);
+                }
+            }
+            else
+            {
+                result = await _qrzApi.GetCallInfo(dxcc);
+            }     
+            var embed = new EmbedBuilder();
+            if (result.Session.Error == null)
+            {                
+                embed.Title = $"DXCC information for [{result.DXCC.Dxcc}]";
+
+
+                if (result.DXCC.Cc != null)
+                {
+                    embed.Fields.Add(new EmbedFieldBuilder{
+                        Name = "CC",
+                        Value = $"{result.DXCC.Cc}",
+                        IsInline = true
+                    }); 
+                }
+                
+                embed.ThumbnailUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true";                 
+                embed.WithColor(new Color(0, 255, 50));
+            }
+            else 
+            {
+                embed.Title = $"Error looking up [{dxcc}]!";
+                embed.WithFields(
+                    new EmbedFieldBuilder
+                    {
+                        Name  = "Error Details",
+                        Value = result.Session.Error 
+                    }
+                );                
+                embed.WithColor(new Color(255, 0, 0));
+            }
+                       
+            embed.WithAuthor(
+                new EmbedAuthorBuilder
+                {
+                    Name = $"Callsign look up performed by [{Context.User.Username}]!",
+                    IconUrl = Context.User.GetAvatarUrl()
+                }
+            );     
+
+            embed.WithFooter(
+                new EmbedFooterBuilder
+                {
+                    Text    = "SevenThree, your local ham radio Discord bot!",
+                    IconUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true"
+                }
+            );
+
+            embed.ThumbnailUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true";
+
+            await ReplyAsync(null, false, embed.Build());                    
         }
     }
 }
