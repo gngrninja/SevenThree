@@ -37,7 +37,7 @@ namespace SevenThree.Modules
             var result = await _qrzApi.GetCallInfo(callsign);
             var embed = new EmbedBuilder();
 
-            if (result.Session.Error != null)
+            if (result.Session.Error == null)
             {                
                 embed.Title = $"Callsign information for [{result.Callsign.Call}]";
 
