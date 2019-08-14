@@ -74,7 +74,9 @@ namespace SevenThree.Modules
             else
             {
                 result = await _qrzApi.GetCallInfo(dxp);
-            }            
+            }      
+
+            await SendCallEmbed(dxp, result);      
         }
 
         [Command("dxcc")]
