@@ -61,7 +61,7 @@ namespace SevenThree.Modules
                 });
             }   
 
-            if (result.Callsign.Lat != null && result.Callsign.Long != null)
+            if (result.Callsign.Lat != null && result.Callsign.Lon != null)
             {
                 embed.Fields.Add(new EmbedFieldBuilder{
                     Name = "Lat/Long",
