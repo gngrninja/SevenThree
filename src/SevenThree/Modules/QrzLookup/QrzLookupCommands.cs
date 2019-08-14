@@ -122,8 +122,8 @@ namespace SevenThree.Modules
 
             if (!string.IsNullOrEmpty(result.Callsign.Image))
             {
-                embed.ImageUrl = result.Callsign.Image;                
-                embed.ThumbnailUrl = "result.Callsign.Image";
+                embed.ImageUrl     = result.Callsign.Image;                
+                embed.ThumbnailUrl = result.Callsign.Image;
             
             }
             else
