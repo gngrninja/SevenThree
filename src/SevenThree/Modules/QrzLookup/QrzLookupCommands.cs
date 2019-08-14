@@ -140,15 +140,21 @@ namespace SevenThree.Modules
             }
             else 
             {
-                embed.Title = $"Error looking up [{callsign}]";
+                embed.Title = $"Error looking up [{callsign}]!";
+                embed.WithFields(
+                    new EmbedFieldBuilder
+                    {
+                        Name  = "Error Details",
+                        Value = result.Session.Error 
+                    }
+                );                
                 embed.WithColor(new Color(255, 0, 0));
-                embed.Description = $"Details -> [{result.Session.Error}]!";
             }
                        
             embed.WithAuthor(
                 new EmbedAuthorBuilder
                 {
-                    Name = $"Callsign looked up by [{Context.User.Username}]!",
+                    Name = $"Callsign look up performed by [{Context.User.Username}]!",
                     IconUrl = Context.User.GetAvatarUrl()
                 }
             );     
@@ -160,6 +166,8 @@ namespace SevenThree.Modules
                     IconUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true"
                 }
             );
+
+            embed.ThumbnailUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true";
 
             await ReplyAsync(null, false, embed.Build()); 
         }
