@@ -22,7 +22,6 @@ using System.Xml;
 using System.Xml.Serialization;
 using System.Text;
 using SevenThree.Modules;
-using Discord.Addons.Interactive;
 
 namespace SevenThree
 {
@@ -94,8 +93,7 @@ namespace SevenThree
                 .AddSingleton<SecurityServices>()
                 .AddTransient<Quiz>()
                 .AddSingleton<QrzApi>()
-                .AddSingleton<HamTestService>()
-                .AddSingleton<InteractiveService>()
+                .AddSingleton<HamTestService>()                
                 .AddDbContext<SevenThreeContext>()         
                 .AddSingleton<CommandHandler>();
             

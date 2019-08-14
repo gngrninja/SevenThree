@@ -18,7 +18,7 @@ namespace SevenThree.Modules
         }
         
         [Command("prefix",RunMode = RunMode.Async)]
-        [RequireUserPermission(GuildPermission.Administrator)]
+        [RequireUserPermission(GuildPermission.KickMembers)]
         public async Task ChangePrefix(char prefix)
         {                        
             var currentPrefix = _db.PrefixList.Where(p => p.ServerId == (long)Context.Guild.Id).FirstOrDefault();

@@ -13,14 +13,13 @@ using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using SevenThree.Database;
 using SevenThree.Models;
-using Discord.Addons.Interactive;
 using SevenThree.Services;
 using System.IO;
 
 namespace SevenThree.Modules
 {
     // for commands to be available, and have the Context passed to them, we must inherit ModuleBase
-    public class HamTestCommands : InteractiveBase
+    public class HamTestCommands : ModuleBase
     {
         private readonly ILogger _logger;
         private readonly SevenThreeContext _db;
@@ -35,9 +34,30 @@ namespace SevenThree.Modules
             _hamTestService = services.GetRequiredService<HamTestService>();
         }
 
+        [Command("tech", RunMode = RunMode.Async)]
+        public async Task StartTech()
+        {
+            ulong id = GetId();
+            await StartTest(numQuestions: 35, questionDelay: 25, directMessage: null, testName: "tech", id: id);
+        }
+
+        [Command("general", RunMode = RunMode.Async)]
+        public async Task StartGeneral()
+        {
+            ulong id = GetId();
+            await StartTest(numQuestions: 35, questionDelay: 25, directMessage: null, testName: "general", id: id);
+        }
+
+        [Command("extra", RunMode = RunMode.Async)]
+        public async Task StartExtra()
+        {
+            ulong id = GetId();
+            await StartTest(numQuestions: 35, questionDelay: 25, directMessage: null, testName: "extra", id: id);
+        }
+
         [Command("start", RunMode = RunMode.Async)]
-        public async Task StartQuiz(string args, int numQuestions = 35, int quesitonDelay = 60, [Remainder]string directMessage = null)
-        {                 
+        public async Task StartQuiz(string args, int numQuestions = 35, int questionDelay = 60, [Remainder]string directMessage = null)
+        {
             if (args == null)
             {
                 await ReplyAsync("Please specify tech, general, or extra!");
@@ -47,128 +67,96 @@ namespace SevenThree.Modules
             switch (args.ToLower())
             {
                 case "tech":
-                {
-                    testName = "tech";                    
-                    break;
-                }
-                case "general":
-                {
-                    testName = "general";                    
-                    break;
-                }
-                case "extra":
-                {
-                    testName = "extra";                    
-                    break;
-                }               
-                default:
-                {
-                   await ReplyAsync("Please specify tech, general, or extra!");
-                   return; 
-                } 
-            }
-            ulong id;
-            if (Context.Channel is IDMChannel || directMessage != null)
-            {
-                id = Context.User.Id;
-            }
-            else
-            {
-                id = Context.Guild.Id;                
-            }
-            if (quesitonDelay > 120)
-            {
-                quesitonDelay = 120;
-            }
-            var checkQuiz = _db.Quiz.Where(q => q.ServerId == id && q.IsActive).FirstOrDefault();
-            if (checkQuiz == null)
-            {
-                await _db.Quiz.AddAsync(
-                    new Quiz
                     {
-                        ServerId = id,
-                        IsActive = true,
-                        TimeStarted = DateTime.Now,
-                        StartedById = (long)Context.User.Id,
-                        StartedByName = Context.User.Username,
-                        StartedByIconUrl = Context.User.GetAvatarUrl()
-                    });
-                await _db.SaveChangesAsync();
-                QuizUtil startQuiz = null;
-                if (Context.Channel is IDMChannel || directMessage != null)
-                {
-                    startQuiz = new QuizUtil(
-                        user: Context.User as IUser,
-                        services: _services,
-                        guild: Context.Guild as IGuild,
-                        id: id
-                    );
-                }
-                else
-                {
-                    startQuiz = new QuizUtil(
-                        channel: Context.Channel as ITextChannel,
-                        services: _services,
-                        guild: Context.Guild as IGuild,
-                        id: id
-                    );
-                }
-                if (_hamTestService.RunningTests.TryAdd(id, startQuiz))
-                {   
-                    var quiz = await _db.Quiz.Where(q => q.ServerId == id && q.IsActive).FirstOrDefaultAsync();
-                    try
-                    {
-                        await startQuiz.StartGame(quiz, numQuestions, testName, quesitonDelay * 1000).ConfigureAwait(false); 
+                        testName = "tech";
+                        break;
                     }
-                    catch (Exception ex)
+                case "general":
                     {
-                        _logger.LogError($"{ex.Message}");
-                    }                                                     
-                }
-                else
-                {
-                    _logger.LogInformation($"server n{Context.Guild.Name} i{Context.Guild.Id} -> Dictionary");
-                    await ReplyAsync("There is already an active quiz!");
-                }        
-            }     
+                        testName = "general";
+                        break;
+                    }
+                case "extra":
+                    {
+                        testName = "extra";
+                        break;
+                    }
+                default:
+                    {
+                        await ReplyAsync("Please specify tech, general, or extra!");
+                        return;
+                    }
+            }
+            if (questionDelay > 120)
+            {
+                questionDelay = 120;
+                await ReplyAsync("Question delay set to 120 seconds, as that is the max.");
+            }
+            else if (questionDelay < 15)
+            {
+                questionDelay = 15;
+                await ReplyAsync("Question delay set to 15 seconds, as that is the minimum");
+            }
+
+            ulong id = 0;
+            if (!string.IsNullOrEmpty(directMessage))
+            {
+                id = GetId(directMessage);
+            }
             else
             {
-                _logger.LogInformation($"server n{Context.Guild.Name} i{Context.Guild.Id} -> DB");
-                await ReplyAsync("There is already an active quiz!");
-            }                      
+                id = GetId();
+            }
+            
+            await StartTest(numQuestions, questionDelay, directMessage, testName, id);
         }
 
         [Command("stop", RunMode = RunMode.Async)]
-        public async Task StopQuiz([Remainder]string args = null)
+        public async Task StopQuiz()
         {                               
-            ulong id;            
-            if (Context.Channel is IDMChannel)
-            {
-                id = (ulong)Context.User.Id;                
-            }
-            else
-            {
-                id = (ulong)Context.Guild.Id;                
-            }   
-            var quiz = await _db.Quiz.Where(q => q.ServerId == Context.Guild.Id && q.IsActive).FirstOrDefaultAsync();        
-            QuizUtil trivia = null;
-
-            var gUser = Context.User as IGuildUser;
-            
-            if (quiz != null && (long)Context.User.Id == quiz.StartedById || gUser.GuildPermissions.KickMembers)
-            {
-                if (_hamTestService.RunningTests.TryRemove(id, out trivia))
-                {                
-                    await trivia.StopQuiz().ConfigureAwait(false);                                
+            ulong id = GetId();
+            var quiz = await _db.Quiz.Where(q => q.ServerId == id && q.IsActive).FirstOrDefaultAsync();  
+            if (quiz != null)
+            {                  
+                var gUser = Context.User as IGuildUser;                        
+                if (gUser != null && Context.User.Id != quiz.StartedById && !gUser.GuildPermissions.KickMembers)
+                {
+                    await ReplyAsync($"Sorry, {Context.User.Mention}, a test can only be stopped by the person who started it, or by someone with at least **KickMembers** permissions in {Context.Guild.Name}!");
+                    return;
+                }
+                else if (quiz != null && gUser != null && gUser.GuildPermissions.KickMembers)
+                {
+                    QuizUtil trivia = null;
+                    if (_hamTestService.RunningTests.TryRemove(id, out trivia))
+                    {                
+                        await trivia.StopQuiz().ConfigureAwait(false);                                
+                    }
+                    else
+                    {
+                        await ReplyAsync("No quiz to end!");
+                    }          
+                    return;      
+                }
+                if (Context.User.Id == quiz.StartedById)
+                {
+                    QuizUtil trivia = null;
+                    if (_hamTestService.RunningTests.TryRemove(id, out trivia))
+                    {                
+                        await trivia.StopQuiz().ConfigureAwait(false);                                
+                    }
+                    else
+                    {
+                        await ReplyAsync("No quiz to end!");
+                    }     
                 }
                 else
                 {
-                    await ReplyAsync("No quiz to end!");
-                }     
+                    await ReplyAsync($"Sorry, {Context.User.Mention}, a test can only be stopped by the person who started it! (or by a moderator)");
+                }                               
             } 
             else
             {
-                await ReplyAsync($"Sorry, {Context.User.Mention}, a test can only be stopped by the person who started it, or by someone with at least **KickMembers** permissions in {Context.Guild.Name}!");
+                await ReplyAsync("No quiz to end!");
             }
         }                
 
@@ -309,8 +297,7 @@ namespace SevenThree.Modules
                     var posAnswerText = answer.Substring(3);
                     var posAnswerChar = answer.Substring(0, 1);
                     if (answerchar == Char.Parse(posAnswerChar))
-                    {
-                        //System.Console.WriteLine($"The answer is {posAnswerText}");
+                    {                        
                         isAnswer = true;
                     }                 
                     await _db.AddAsync(
@@ -329,8 +316,7 @@ namespace SevenThree.Modules
             {
                 foreach (var file in files)
                 {
-                    string curFigure = file;
-                    //System.Console.WriteLine(name);
+                    string curFigure = file;                
                     if (File.Exists(curFigure))
                     {                    
                         var contents = File.ReadAllBytes(curFigure);
@@ -347,8 +333,102 @@ namespace SevenThree.Modules
                 }
             }                       
             await ReplyAsync($"Imported {testName} into the database!");
-        }        
+        }    
 
-        
+        private async Task StartTest(
+            int numQuestions, 
+            int questionDelay, 
+            string directMessage, 
+            string testName, 
+            ulong id
+        )
+        {
+            var checkQuiz = _db.Quiz.Where(q => q.ServerId == id && q.IsActive).FirstOrDefault();
+            if (checkQuiz == null)
+            {
+                await _db.Quiz.AddAsync(
+                    new Quiz
+                    {
+                        ServerId = id,
+                        IsActive = true,
+                        TimeStarted = DateTime.Now,
+                        StartedById = Context.User.Id,
+                        StartedByName = Context.User.Username,
+                        StartedByIconUrl = Context.User.GetAvatarUrl()
+                    });
+                await _db.SaveChangesAsync();
+                QuizUtil startQuiz = null;
+                if (Context.Channel is IDMChannel || directMessage != null)
+                {
+                    startQuiz = new QuizUtil(
+                        user: Context.User as IUser,
+                        services: _services,
+                        guild: Context.Guild as IGuild,
+                        id: id
+                    );
+                }
+                else
+                {
+                    startQuiz = new QuizUtil(
+                        channel: Context.Channel as ITextChannel,
+                        services: _services,
+                        guild: Context.Guild as IGuild,
+                        id: id
+                    );
+                }
+                if (_hamTestService.RunningTests.TryAdd(id, startQuiz))
+                {
+                    var quiz = await _db.Quiz.Where(q => q.ServerId == id && q.IsActive).FirstOrDefaultAsync();
+                    try
+                    {
+                        await startQuiz.StartGame(quiz, numQuestions, testName, questionDelay * 1000).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError($"{ex.Message}");
+                    }
+                }
+                else
+                {
+                    _logger.LogInformation($"server n{Context.Guild.Name} i{Context.Guild.Id} -> Dictionary");
+                    await ReplyAsync("There is already an active quiz!");
+                }
+            }
+            else
+            {
+                _logger.LogInformation($"server n{Context.Guild.Name} i{Context.Guild.Id} -> DB");
+                await ReplyAsync("There is already an active quiz!");
+            }
+        } 
+
+        private ulong GetId(string directMessage)
+        {
+            ulong id;
+            if (Context.Channel is IDMChannel || directMessage.ToLower() == "private")
+            {
+                id = Context.User.Id;
+            }
+            else
+            {
+                id = Context.Guild.Id;
+            }
+
+            return id;
+        }
+
+        private ulong GetId()
+        {
+            ulong id;
+            if (Context.Channel is IDMChannel)
+            {
+                id = Context.User.Id;
+            }
+            else
+            {
+                id = Context.Guild.Id;
+            }
+
+            return id;
+        }                           
     }
 }

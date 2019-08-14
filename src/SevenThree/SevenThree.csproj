@@ -18,8 +18,4 @@
 
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\Discord.Addons.Interactive\Discord.Addons.Interactive.csproj" />
-  </ItemGroup>
-
 </Project>

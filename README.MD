@@ -21,37 +21,59 @@ If you do not specify the number of questions, it will default to 35.
 
 ![start](https://github.com/gngrninja/SevenThree/blob/master/media/quiz_start.png?raw=true)
 
+### Test starting shortcuts
+You can start a test with the defaults by using either:
+
+```
++tech
+```
+or
+```
++general
+```
+or
+```
++extra
+```
+
+![tech](https://github.com/gngrninja/SevenThree/blob/master/media/tech_short.png?raw=true)
+
 Guessing is simple, just guess the letter of the answer. For tests in Discord channels, incorrect guesses will cause other guesses to be ignored until the next question is presented.
 
 ![wrong](https://github.com/gngrninja/SevenThree/blob/master/media/wrong_answer.png?raw=true)
 
-### Start a test for the general class license with 10 questions
+### Start a test with 10 questions lasting 15 seconds
+
 ```
-+start general 10
++start general 10 15
 ```
 
+![1015](https://github.com/gngrninja/SevenThree/blob/master/media/gen_1015.png?raw=true)
+
 ### Start a private test (direct messaged to you) for the extra class license, with 20 questions
+
 For this you can either direct message the bot:
 ```
 +start extra 20
 ```
-Or if you're in a Discord server's channel, use:
+Or if you're in a Discord server's channel, use (will start a private test with 20 questions, with 25 seconds between questions):
 ```
-+start extra 20 private
++start extra 20 25 private
 ```
 
-![startpriv](https://github.com/gngrninja/SevenThree/blob/master/media/start_priv.png?raw=true)
+![startpriv](https://github.com/gngrninja/SevenThree/blob/master/media/priv_start.png?raw=true)
+![startpriv](https://github.com/gngrninja/SevenThree/blob/master/media/priv_start2.png?raw=true)
 
 When you guess wrong on a private test, it will proceed to the next question, as well as tell you which answer was correct.
 
-![startpriv](https://github.com/gngrninja/SevenThree/blob/master/media/priv_wrong.png?raw=true)
+![privwrong](https://github.com/gngrninja/SevenThree/blob/master/media/priv_wrong.png?raw=true)
 
 ### Stop a test
 ```
 +stop
 ```
 
-![startpriv](https://github.com/gngrninja/SevenThree/blob/master/media/stop_cmd.png?raw=true)
+![stopcmd](https://github.com/gngrninja/SevenThree/blob/master/media/stop_cmd.png?raw=true)
 
 ### Lookup a callsign
 ```
@@ -62,6 +84,14 @@ This command will lookup information from QRZ, and present it in Discord. If the
 
 ![lookup](https://github.com/gngrninja/SevenThree/blob/master/media/lookup_call.png?raw=true)
 
+### Change command prefix
+If you would like to change the prefix for this bot's commands, use:
 
-# Issues?
+```
++prefix .
+```
+
+After using this command, be sure to remember the prefix you changed it to!
+
+# Issues / Feedback?
 Feel free to open up an issue against this repository, or message me on my discord server: https://gngr.ninja/discord

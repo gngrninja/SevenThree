@@ -483,7 +483,7 @@ namespace SevenThree.Modules
                 embed.WithFooter(
                     new EmbedFooterBuilder
                     {
-                        Text = $"[{msg?.Author.Username}] has [{correctAnswers.Count}] correct answer so far!"
+                        Text = $"[{msg?.Author.Username}] has [{correctAnswers.Count}] correct answers so far!"
                     }
                 );
             }
