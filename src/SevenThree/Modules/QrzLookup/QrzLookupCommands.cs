@@ -51,7 +51,6 @@ namespace SevenThree.Modules
                 });         
             }
                
-
             if (result.Callsign.U_views != null)
             {
                 embed.Fields.Add(new EmbedFieldBuilder{
@@ -123,9 +122,27 @@ namespace SevenThree.Modules
 
             if (!string.IsNullOrEmpty(result.Callsign.Image))
             {
-                embed.ImageUrl = result.Callsign.Image;
-            }            
-            embed.ThumbnailUrl = Context.User.GetAvatarUrl();
+                embed.ImageUrl = result.Callsign.Image;                
+                embed.ThumbnailUrl = "result.Callsign.Image";
+            
+            }
+            else
+            {
+               embed.ThumbnailUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true"; 
+            } 
+            embed.WithAuthor(
+                new EmbedAuthorBuilder
+            {
+                    Name = $"Callsign looked up by [{Context.User.Username}]!",
+                    IconUrl = Context.User.GetAvatarUrl()
+            });         
+            embed.WithFooter(
+                new EmbedFooterBuilder
+                {
+                    Text    = "SevenThree, your local ham radio Discord bot!",
+                    IconUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true"
+                }
+            );
             await ReplyAsync(null, false, embed.Build()); 
         }
     }
