@@ -1,7 +1,7 @@
 **__Test/Trivia Commands:__**
 :black_medium_small_square: **!start tech 10** (start the technician class test with 10 questions) 
 :black_medium_small_square: **!start general 10 50** (start the general class test, with 10 questions and 50 seconds between questions)
-:black_medium_small_square: **!start extra 10** (start the extra class test, with 10 questions)
+:black_medium_small_square: **!start extra 10**+ (start the extra class test, with 10 questions)
 :black_medium_small_square: **!tech** (start the technician class test with 35 questions and 45 seconds between questions)
 :black_medium_small_square: **!general** (start the general class test with 35 questions and 45 seconds between questions)
 :black_medium_small_square: **!extra** (start the extra class test with 35 questions and 45 seconds between questions)
@@ -10,6 +10,9 @@
 **__Ham Commands__**
 :black_medium_small_square: **!conds** (lookup conditions, WIP)
 :black_medium_small_square: **!lookup** (lookup a callsign, uses QRZ, WIP)
+
+**__Bot__**
+:black_medium_small_square: **!prefix** (ex: !prefix .) (change bot's prefix for the server, requires permission)
 
 **For a more detailed command list, please visit:** https://github.com/gngrninja/SevenThree/blob/master/README.MD
 
