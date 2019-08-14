@@ -38,25 +38,25 @@ namespace SevenThree.Modules
         public async Task StartTech()
         {
             ulong id = GetId();
-            await StartTest(numQuestions: 35, questionDelay: 25, directMessage: null, testName: "tech", id: id);
+            await StartTest(numQuestions: 35, questionDelay: 45, directMessage: null, testName: "tech", id: id);
         }
 
         [Command("general", RunMode = RunMode.Async)]
         public async Task StartGeneral()
         {
             ulong id = GetId();
-            await StartTest(numQuestions: 35, questionDelay: 25, directMessage: null, testName: "general", id: id);
+            await StartTest(numQuestions: 35, questionDelay: 45, directMessage: null, testName: "general", id: id);
         }
 
         [Command("extra", RunMode = RunMode.Async)]
         public async Task StartExtra()
         {
             ulong id = GetId();
-            await StartTest(numQuestions: 35, questionDelay: 25, directMessage: null, testName: "extra", id: id);
+            await StartTest(numQuestions: 35, questionDelay: 45, directMessage: null, testName: "extra", id: id);
         }
 
         [Command("start", RunMode = RunMode.Async)]
-        public async Task StartQuiz(string args, int numQuestions = 35, int questionDelay = 60, [Remainder]string directMessage = null)
+        public async Task StartQuiz(string args, int numQuestions = 35, int questionDelay = 45, [Remainder]string directMessage = null)
         {
             if (args == null)
             {

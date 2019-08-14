@@ -104,8 +104,20 @@ namespace SevenThree.Modules
             string result = string.Empty;
             using (var client = new HttpClient())
             {
-                var response = client.GetAsync($"{_baseUrl}/?s={_apiKey};callsign={callsign}").Result;
-                result = response.Content.ReadAsStringAsync().Result;
+                HttpResponseMessage response = null;
+                try 
+                {
+                    response = client.GetAsync($"{_baseUrl}/?s={_apiKey};callsign={callsign}").Result;
+                }
+                catch
+                {
+                    await GetKey();
+                    response = client.GetAsync($"{_baseUrl}/?s={_apiKey};callsign={callsign}").Result;
+                }
+                finally
+                {
+                    result = response.Content.ReadAsStringAsync().Result;
+                }                
             }
 
             _logger.LogInformation(result);

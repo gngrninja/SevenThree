@@ -24,6 +24,7 @@ namespace SevenThree.Modules.BandConditions
         }
 
         [Command("conditions", RunMode = RunMode.Async)]
+        [Alias("conds")]
         public async Task GetConditions()
         {
             var embed = new EmbedBuilder();
