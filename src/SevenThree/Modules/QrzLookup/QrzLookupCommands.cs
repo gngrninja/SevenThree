@@ -29,6 +29,10 @@ namespace SevenThree.Modules
         [Command("lookup")]
         public async Task LookupCall([Remainder] string callsign)
         {
+            if (callsign.Contains("/"))
+            {
+                callsign = callsign.Replace("/","");
+            }            
             var result = await _qrzApi.GetCallInfo(callsign);
             var embed = new EmbedBuilder();
             embed.Title = $"{result.Callsign.Url}Callsign information for {result.Callsign.Call}";
