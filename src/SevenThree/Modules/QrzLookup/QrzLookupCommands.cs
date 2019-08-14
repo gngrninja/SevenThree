@@ -29,12 +29,27 @@ namespace SevenThree.Modules
         [Command("lookup")]
         public async Task LookupCall([Remainder] string callsign)
         {
+            Models.QrzApiXml.QRZDatabase result = null;
+            string callSignLong = string.Empty;
             if (callsign.Contains("/"))
             {
-                callsign = callsign.Replace("/","");
+                callSignLong = callsign.Replace("/", "");
+                callsign = callsign.Split('/')[0].Trim();                
             }    
 
-            var result = await _qrzApi.GetCallInfo(callsign);
+            if (!string.IsNullOrEmpty(callSignLong))
+            {
+                result = await _qrzApi.GetCallInfo(callSignLong);
+                if (result.Session.Error != null && result.Session.Error.Contains("Not found:"))
+                {
+                    result = await _qrzApi.GetCallInfo(callsign);
+                }
+            }
+            else
+            {
+                result = await _qrzApi.GetCallInfo(callSignLong);
+            }
+            result = await _qrzApi.GetCallInfo(callsign);
             var embed = new EmbedBuilder();
 
             if (result.Session.Error == null)
