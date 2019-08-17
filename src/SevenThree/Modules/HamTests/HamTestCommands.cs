@@ -345,38 +345,41 @@ namespace SevenThree.Modules
         )
         {
             var channelInfo = await _db.QuizSettings.Where(q => q.DiscordGuildId == Context.Guild.Id).FirstOrDefaultAsync();
-            switch (testName)
+            if (Context.Channel is IDMChannel || directMessage != null)
             {
-                case "tech":
+                switch (testName)
                 {
-                    if (channelInfo != null && channelInfo.TechChannelId != null && channelInfo.TechChannelId != Context.Channel.Id)
+                    case "tech":
                     {
-                        var goodChan = await Context.Guild.GetChannelAsync((ulong)channelInfo.TechChannelId);
-                        await ReplyAsync($"Tech test commands cannot be used in this channel, please use them in [#{goodChan.Name}]!");                            
-                        return;
+                        if (channelInfo != null && channelInfo.TechChannelId != null && channelInfo.TechChannelId != Context.Channel.Id)
+                        {
+                            var goodChan = await Context.Guild.GetChannelAsync((ulong)channelInfo.TechChannelId);
+                            await ReplyAsync($"Tech test commands cannot be used in this channel, please use them in [#{goodChan.Name}]!");                            
+                            return;
+                        }
+                        break;
                     }
-                    break;
-                }
-                case "general":
-                {
-                    if (channelInfo != null && channelInfo.GeneralChannelId != null && channelInfo.GeneralChannelId != Context.Channel.Id)
-                    {                        
-                        var goodChan = await Context.Guild.GetChannelAsync((ulong)channelInfo.GeneralChannelId);
-                        await ReplyAsync($"General test commands cannot be used in this channel, please use them in [#{goodChan.Name}]!");                            
-                        return;
-                    }
-                    break;
-                }
-                case "extra":
-                {
-                    if (channelInfo != null && channelInfo.ExtraChannelId != null && channelInfo.ExtraChannelId != Context.Channel.Id)
+                    case "general":
                     {
-                        var goodChan = await Context.Guild.GetChannelAsync((ulong)channelInfo.ExtraChannelId);
-                        await ReplyAsync($"Extra test commands cannot be used in this channel, please use them in [#{goodChan.Name}]!");                            
-                        return;
-                    }                    
-                    break;
-                }
+                        if (channelInfo != null && channelInfo.GeneralChannelId != null && channelInfo.GeneralChannelId != Context.Channel.Id)
+                        {                        
+                            var goodChan = await Context.Guild.GetChannelAsync((ulong)channelInfo.GeneralChannelId);
+                            await ReplyAsync($"General test commands cannot be used in this channel, please use them in [#{goodChan.Name}]!");                            
+                            return;
+                        }
+                        break;
+                    }
+                    case "extra":
+                    {
+                        if (channelInfo != null && channelInfo.ExtraChannelId != null && channelInfo.ExtraChannelId != Context.Channel.Id)
+                        {
+                            var goodChan = await Context.Guild.GetChannelAsync((ulong)channelInfo.ExtraChannelId);
+                            await ReplyAsync($"Extra test commands cannot be used in this channel, please use them in [#{goodChan.Name}]!");                            
+                            return;
+                        }                    
+                        break;
+                    }
+                }            
             }
             var checkQuiz = _db.Quiz.Where(q => q.ServerId == id && q.IsActive).FirstOrDefault();
             if (checkQuiz == null)
