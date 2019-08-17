@@ -344,7 +344,7 @@ namespace SevenThree.Modules
             ulong id
         )
         {            
-            if (Context.Channel is IDMChannel || directMessage != null)
+            if (!(Context.Channel is IDMChannel) || !string.IsNullOrEmpty(directMessage))
             {
                 var channelInfo = await _db.QuizSettings.Where(q => q.DiscordGuildId == Context.Guild.Id).FirstOrDefaultAsync();
                 switch (testName)
