@@ -15,6 +15,8 @@ namespace SevenThree.Database
         public DbSet<UserAnswer> UserAnswer { get; set; }
         public DbSet<PrefixList> PrefixList { get; set; }
         public DbSet<Cred> Cred { get; set; }
+        public DbSet<ApiData> ApiData { get; set; }
+        public DbSet<QuizSettings> QuizSetting { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {

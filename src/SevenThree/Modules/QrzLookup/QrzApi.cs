@@ -22,145 +22,150 @@ namespace SevenThree.Modules
         private readonly IConfiguration _config;
         private string _baseUrl;
         private string _sessionCheckUrl;
-        private string _userName;
-        private string _password;
-        private XmlServices _xmlService;
-        private QrzApiXml.QRZDatabase _qrzApi;
-        private string _apiKey;
-        private readonly SecurityServices _secure;
-        private readonly NetworkCredential _creds;
+        private XmlServices _xmlService;        
+        private string _apiKey;              
         private readonly SevenThreeContext _db;
+        private ApiData _qrzApiData;
 
         public QrzApi(IServiceProvider services)
         {
-            _config = services.GetRequiredService<IConfiguration>();
-            _secure = services.GetRequiredService<SecurityServices>();
-            _logger = services.GetRequiredService<ILogger<QrzApi>>();
+            _config     = services.GetRequiredService<IConfiguration>();            
+            _logger     = services.GetRequiredService<ILogger<QrzApi>>();
             _xmlService = services.GetRequiredService<XmlServices>();
-            _db = services.GetRequiredService<SevenThreeContext>();
+            _db         = services.GetRequiredService<SevenThreeContext>();                    
 
-                    
-            _baseUrl = "https://xmldata.qrz.com/xml/current";
+            _qrzApiData = _db.ApiData.Where(a => a.AppName == "QRZ").FirstOrDefault();
 
-            var creds = _db.Cred.FirstOrDefault();
-            //System.Console.WriteLine("user");
-            _userName = creds.User;                        
-            //System.Console.WriteLine("password");
-            /* 
-            while (true)
+            if (_qrzApiData == null) 
             {
-                var key = System.Console.ReadKey(true);
-                if (key.Key == ConsoleKey.Enter)
-                {
-                    break;
-                }
-                _password += key.KeyChar;
+                throw new ApplicationException("Unable to get QRZ api data, cannot continue!");
             }
-            */
-            
-            _creds = _secure.ConvertToSecure(username: _userName, password: creds.Pass);
 
-            _password = null;
-            _userName = null;
-            creds = null;            
+            _baseUrl = _qrzApiData.ApiBaseUrl;
+            _apiKey  = _qrzApiData.ApiKey;
 
-            _apiKey = this.GetKey().Result;
-            _sessionCheckUrl = $"{_baseUrl}/?s={_apiKey};callsign=kf7ign";
+            this.GetCallInfo("kf7ign");
         }
 
-        public async Task<String> GetKey()
-        {
+        public async Task GetKey()
+        {            
+            Cred creds = null;
             string result = string.Empty;
-            using (var client = new HttpClient())
+            try
             {
-                var fullUrl = $"{_baseUrl}/?username={_creds.UserName};password={_secure.ConvertFromSecure(_creds)};agent=q5.0";
-                var response = client.GetAsync(fullUrl).Result;
-                result = response.Content.ReadAsStringAsync().Result;
+                creds            = _db.Cred.FirstOrDefault();                                                       
+                _sessionCheckUrl = $"{_baseUrl}/?s={_apiKey};callsign=kf7ign";
+                
+                using (var client = new HttpClient())
+                {
+                    var fullUrl  = $"{_baseUrl}/?username={creds.User};password={creds.Pass};agent=q5.0";
+                    var response = await client.GetAsync(fullUrl);
+                    result       = await response.Content.ReadAsStringAsync();
+                }
+                _logger.LogInformation($"{result}");
+            }            
+            catch
+            {
+                _logger.LogError("Error updating QRZ Api key!");
             }
-            _logger.LogInformation($"{result}");
-            var byteArray = Encoding.UTF8.GetBytes(result);
-            using (var sr = new StreamReader(new MemoryStream(byteArray)))
+            finally 
+            {                                
+                creds = null;
+            }
+            var qrzApi = ConvertResultToXml(result);           
+            if(!string.IsNullOrEmpty(qrzApi.Session.Key))
             {
-                _qrzApi = new XmlServices().GetQrzResultFromString(sr);
-            }  
-
-            if(!string.IsNullOrEmpty(_qrzApi.Session.Key))
-            {
-                return _qrzApi.Session.Key;
+                _qrzApiData.ApiKey = qrzApi.Session.Key;
+                await _db.SaveChangesAsync();
+                _logger.LogInformation("Updated QRZ Api Key!");
             } 
             else 
             {
-                if (!string.IsNullOrEmpty(_qrzApi.Session.Error))
+                if (!string.IsNullOrEmpty(qrzApi.Session.Error))
                 {
-                    _logger.LogError($"(_qrzApi.Session.Error)");
-                    throw new Exception($"No key returned!");
+                    _logger.LogError($"{qrzApi.Session.Error}");
                 }
-                throw new Exception("qrz api error");
             }
         }
 
         public async Task<QrzApiXml.QRZDatabase> GetDxccInfo(string dxcc)
-        {
-            string result = string.Empty;
-            using (var client = new HttpClient())
+        {                        
+            QrzApiXml.QRZDatabase xmlResult = ConvertResultToXml(await QrzApiRequest(dxcc, "dxcc"));       
+            if (!string.IsNullOrEmpty(xmlResult.Session.Error) && xmlResult.Session.Error.Trim() == "Session Timeout")
             {
-                HttpResponseMessage response = null;
-                try 
-                {
-                    response = client.GetAsync($"{_baseUrl}/?s={_apiKey};dxcc={dxcc}").Result;
-                }
-                catch
-                {
-                    await GetKey();
-                    response = client.GetAsync($"{_baseUrl}/?s={_apiKey};dxcc={dxcc}").Result;
-                }
-                finally
-                {
-                    result = response.Content.ReadAsStringAsync().Result;
-                }                
+                _logger.LogInformation("QRZ Api Key needs to be refreshed... attempting to update");
+                await GetKey();
+                xmlResult = ConvertResultToXml(await QrzApiRequest(dxcc, "dxcc"));
+
             }
-
-            _logger.LogInformation(result);
-
-            var byteArray = Encoding.UTF8.GetBytes(result);
-            using (var sr = new StreamReader(new MemoryStream(byteArray)))
+            else if (!string.IsNullOrEmpty(xmlResult.Session.Error))
             {
-                _qrzApi = new XmlServices().GetQrzResultFromString(sr);
-            }  
-
-            return _qrzApi;            
+                _logger.LogError($"Error accessing QRZ Api -> [{xmlResult.Session.Error}]!");                
+            }
+            return xmlResult;
         }
-        
+
         public async Task<QrzApiXml.QRZDatabase> GetCallInfo(string callsign)
+        {            
+            QrzApiXml.QRZDatabase xmlResult = ConvertResultToXml(await QrzApiRequest(callsign, "callsign"));            
+            if (!string.IsNullOrEmpty(xmlResult.Session.Error) && xmlResult.Session.Error.Trim() == "Session Timeout")
+            {
+                _logger.LogInformation("QRZ Api Key needs to be refreshed... attempting to update");
+                await GetKey();                
+                xmlResult = ConvertResultToXml(await QrzApiRequest(callsign, "callsign"));                
+            }
+            else if (!string.IsNullOrEmpty(xmlResult.Session.Error))
+            {
+                _logger.LogError($"Error accessing QRZ Api -> [{xmlResult.Session.Error}]!");                
+            }
+            return xmlResult;            
+        }  
+
+        private async Task<string> QrzApiRequest(string lookup, string type)
         {
-            string result = string.Empty;
+            string result = null;
             using (var client = new HttpClient())
             {
                 HttpResponseMessage response = null;
-                try 
+                try
                 {
-                    response = client.GetAsync($"{_baseUrl}/?s={_apiKey};callsign={callsign}").Result;
+                    response = await client.GetAsync($"{_baseUrl}/?s={_apiKey};{type}={lookup}");
+                    result = await response.Content.ReadAsStringAsync();
                 }
-                catch
+                catch (Exception ex)
                 {
-                    await GetKey();
-                    response = client.GetAsync($"{_baseUrl}/?s={_apiKey};callsign={callsign}").Result;
+                    _logger.LogError($"Error accessing QRZ Api -> [{ex.Message}]");
                 }
-                finally
-                {
-                    result = response.Content.ReadAsStringAsync().Result;
-                }                
             }
-
             _logger.LogInformation(result);
+            return result;
+        }
 
+        private static QrzApiXml.QRZDatabase ConvertResultToXml(string result)
+        {
+            QrzApiXml.QRZDatabase xmlResult;
             var byteArray = Encoding.UTF8.GetBytes(result);
             using (var sr = new StreamReader(new MemoryStream(byteArray)))
             {
-                _qrzApi = new XmlServices().GetQrzResultFromString(sr);
-            }  
+                xmlResult = new XmlServices().GetQrzResultFromString(sr);
+            }
 
-            return _qrzApi;
-        }
+            return xmlResult;
+        }                                   
     }
 }
+
+//System.Console.WriteLine("user");                     
+//_userName = Console.ReadLine();
+//System.Console.WriteLine("password");
+/* 
+while (true)
+{
+    var key = System.Console.ReadKey(true);
+    if (key.Key == ConsoleKey.Enter)
+    {
+        break;
+    }
+    _password += key.KeyChar;
+}
+*/
