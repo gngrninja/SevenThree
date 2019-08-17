@@ -64,6 +64,7 @@ namespace SevenThree.Modules
                 return;
             }
             var testName = string.Empty;
+            
             switch (args.ToLower())
             {
                 case "tech":
@@ -86,7 +87,7 @@ namespace SevenThree.Modules
                         await ReplyAsync("Please specify tech, general, or extra!");
                         return;
                     }
-            }
+            }                        
             if (questionDelay > 120)
             {
                 questionDelay = 120;
@@ -343,6 +344,40 @@ namespace SevenThree.Modules
             ulong id
         )
         {
+            var channelInfo = await _db.QuizSettings.Where(q => q.DiscordGuildId == Context.Guild.Id).FirstOrDefaultAsync();
+            switch (testName)
+            {
+                case "tech":
+                {
+                    if (channelInfo != null && channelInfo.TechChannelId != null && channelInfo.TechChannelId != Context.Channel.Id)
+                    {
+                        var goodChan = await Context.Guild.GetChannelAsync((ulong)channelInfo.TechChannelId);
+                        await ReplyAsync($"Tech test commands cannot be used in this channel, please use them in [#{goodChan.Name}]!");                            
+                        return;
+                    }
+                    break;
+                }
+                case "general":
+                {
+                    if (channelInfo != null && channelInfo.GeneralChannelId != null && channelInfo.GeneralChannelId != Context.Channel.Id)
+                    {                        
+                        var goodChan = await Context.Guild.GetChannelAsync((ulong)channelInfo.GeneralChannelId);
+                        await ReplyAsync($"General test commands cannot be used in this channel, please use them in [#{goodChan.Name}]!");                            
+                        return;
+                    }
+                    break;
+                }
+                case "extra":
+                {
+                    if (channelInfo != null && channelInfo.ExtraChannelId != null && channelInfo.ExtraChannelId != Context.Channel.Id)
+                    {
+                        var goodChan = await Context.Guild.GetChannelAsync((ulong)channelInfo.ExtraChannelId);
+                        await ReplyAsync($"Extra test commands cannot be used in this channel, please use them in [#{goodChan.Name}]!");                            
+                        return;
+                    }                    
+                    break;
+                }
+            }
             var checkQuiz = _db.Quiz.Where(q => q.ServerId == id && q.IsActive).FirstOrDefault();
             if (checkQuiz == null)
             {
