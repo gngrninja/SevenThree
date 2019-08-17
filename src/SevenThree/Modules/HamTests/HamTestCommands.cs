@@ -343,10 +343,10 @@ namespace SevenThree.Modules
             string testName, 
             ulong id
         )
-        {
-            var channelInfo = await _db.QuizSettings.Where(q => q.DiscordGuildId == Context.Guild.Id).FirstOrDefaultAsync();
+        {            
             if (Context.Channel is IDMChannel || directMessage != null)
             {
+                var channelInfo = await _db.QuizSettings.Where(q => q.DiscordGuildId == Context.Guild.Id).FirstOrDefaultAsync();
                 switch (testName)
                 {
                     case "tech":
