@@ -358,7 +358,7 @@ namespace SevenThree.Modules
                     {
                         return;
                     }
-                    if (txtChannel != null && txtChannel.Guild.Id != _id)
+                    if (txtChannel != null && txtChannel.Id != _id)
                     {
                         return;
                     }

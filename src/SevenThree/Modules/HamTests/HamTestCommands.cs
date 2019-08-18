@@ -448,7 +448,7 @@ namespace SevenThree.Modules
             }
             else
             {
-                id = Context.Guild.Id;
+                id = Context.Channel.Id;
             }
 
             return id;
@@ -463,7 +463,7 @@ namespace SevenThree.Modules
             }
             else
             {
-                id = Context.Guild.Id;
+                id = Context.Channel.Id;
             }
 
             return id;
