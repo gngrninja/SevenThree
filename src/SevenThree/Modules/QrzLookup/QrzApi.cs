@@ -77,6 +77,7 @@ namespace SevenThree.Modules
             {
                 _qrzApiData.ApiKey = qrzApi.Session.Key;
                 await _db.SaveChangesAsync();
+                _apiKey = _qrzApiData.ApiKey;
                 _logger.LogInformation("Updated QRZ Api Key!");
             } 
             else 
