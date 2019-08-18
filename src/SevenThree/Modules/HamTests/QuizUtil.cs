@@ -367,12 +367,15 @@ namespace SevenThree.Modules
                         return;
                     }
                     var answered = false;
-                    await _guessLock.WaitAsync().ConfigureAwait(false);
-                    _messages.Add(msg);
+                    await _guessLock.WaitAsync().ConfigureAwait(false);                    
                     try
                     {                            
                         if (IsActive && !_tokenSource.IsCancellationRequested)
                         {
+                            if (txtChannel != null)
+                            {
+                                _messages.Add(msg);
+                            }
                             char? answerChar = null;
                             answerChar = char.Parse(msg.Content.ToUpper());
                             UserAnswer userAnswered = null;
