@@ -92,14 +92,26 @@ namespace SevenThree.Modules
         public async Task<QrzApiXml.QRZDatabase> GetDxccInfo(string dxcc)
         {                        
             QrzApiXml.QRZDatabase xmlResult = ConvertResultToXml(await QrzApiRequest(dxcc, "dxcc"));       
-            if (!string.IsNullOrEmpty(xmlResult.Session.Error) && xmlResult.Session.Error.Trim() == "Session Timeout" || xmlResult.Session.Error.Trim() == "Invalid session key")
+            if (!string.IsNullOrEmpty(xmlResult.Session.Error))
             {
-                _logger.LogInformation("QRZ Api Key needs to be refreshed... attempting to update");
-                await GetKey();
-                xmlResult = ConvertResultToXml(await QrzApiRequest(dxcc, "dxcc"));
-
+                switch (xmlResult.Session.Error)
+                {
+                    case "Session Timeout":
+                    {
+                        _logger.LogInformation("QRZ Api Key needs to be refreshed... attempting to update");
+                        await GetKey();  
+                        break;
+                    }
+                    case "Invalid session key":
+                    {
+                        _logger.LogInformation("QRZ Api Key needs to be refreshed... attempting to update");
+                        await GetKey();  
+                        break;
+                    }
+                }              
+                xmlResult = ConvertResultToXml(await QrzApiRequest(dxcc, "dxcc"));                
             }
-            else if (!string.IsNullOrEmpty(xmlResult.Session.Error))
+            else if (!string.IsNullOrEmpty(xmlResult.Session.Error) && !xmlResult.Session.Error.Contains("Not found:"))
             {
                 _logger.LogError($"Error accessing QRZ Api -> [{xmlResult.Session.Error}]!");                
             }
@@ -109,13 +121,26 @@ namespace SevenThree.Modules
         public async Task<QrzApiXml.QRZDatabase> GetCallInfo(string callsign)
         {            
             QrzApiXml.QRZDatabase xmlResult = ConvertResultToXml(await QrzApiRequest(callsign, "callsign"));            
-            if (!string.IsNullOrEmpty(xmlResult.Session.Error) && xmlResult.Session.Error.Trim() == "Session Timeout" || xmlResult.Session.Error.Trim() == "Invalid session key")
+            if (!string.IsNullOrEmpty(xmlResult.Session.Error))
             {
-                _logger.LogInformation("QRZ Api Key needs to be refreshed... attempting to update");
-                await GetKey();                
+                switch (xmlResult.Session.Error)
+                {
+                    case "Session Timeout":
+                    {
+                        _logger.LogInformation("QRZ Api Key needs to be refreshed... attempting to update");
+                        await GetKey();  
+                        break;
+                    }
+                    case "Invalid session key":
+                    {
+                        _logger.LogInformation("QRZ Api Key needs to be refreshed... attempting to update");
+                        await GetKey();  
+                        break;
+                    }
+                }              
                 xmlResult = ConvertResultToXml(await QrzApiRequest(callsign, "callsign"));                
             }
-            else if (!string.IsNullOrEmpty(xmlResult.Session.Error))
+            else if (!string.IsNullOrEmpty(xmlResult.Session.Error) && !xmlResult.Session.Error.Contains("Not found:"))
             {
                 _logger.LogError($"Error accessing QRZ Api -> [{xmlResult.Session.Error}]!");                
             }
