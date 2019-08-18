@@ -34,6 +34,7 @@ namespace SevenThree.Modules
 
         [Command("clearafter")]
         [RequireUserPermission(GuildPermission.KickMembers)]        
+        [RequireBotPermission(ChannelPermission.ManageMessages)]
         public async Task ClearAfterTaken()
         {
             var sb = new StringBuilder();
