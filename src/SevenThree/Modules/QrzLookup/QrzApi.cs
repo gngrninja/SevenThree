@@ -91,7 +91,7 @@ namespace SevenThree.Modules
         public async Task<QrzApiXml.QRZDatabase> GetDxccInfo(string dxcc)
         {                        
             QrzApiXml.QRZDatabase xmlResult = ConvertResultToXml(await QrzApiRequest(dxcc, "dxcc"));       
-            if (!string.IsNullOrEmpty(xmlResult.Session.Error) && xmlResult.Session.Error.Trim() == "Session Timeout")
+            if (!string.IsNullOrEmpty(xmlResult.Session.Error) && xmlResult.Session.Error.Trim() == "Session Timeout" || xmlResult.Session.Error.Trim() == "Invalid session key")
             {
                 _logger.LogInformation("QRZ Api Key needs to be refreshed... attempting to update");
                 await GetKey();
@@ -108,7 +108,7 @@ namespace SevenThree.Modules
         public async Task<QrzApiXml.QRZDatabase> GetCallInfo(string callsign)
         {            
             QrzApiXml.QRZDatabase xmlResult = ConvertResultToXml(await QrzApiRequest(callsign, "callsign"));            
-            if (!string.IsNullOrEmpty(xmlResult.Session.Error) && xmlResult.Session.Error.Trim() == "Session Timeout")
+            if (!string.IsNullOrEmpty(xmlResult.Session.Error) && xmlResult.Session.Error.Trim() == "Session Timeout" || xmlResult.Session.Error.Trim() == "Invalid session key")
             {
                 _logger.LogInformation("QRZ Api Key needs to be refreshed... attempting to update");
                 await GetKey();                
