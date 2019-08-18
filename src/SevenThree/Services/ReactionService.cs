@@ -25,10 +25,10 @@ namespace SevenThree.Services
 
         private async Task ReactionRemoved(Cacheable<IUserMessage, ulong> arg1, ISocketMessageChannel arg2, SocketReaction arg3)
         {
-            var guild  = _client.Guilds.Where(g => g.Id == 249709417963061248).FirstOrDefault() as IGuild;            
+            var guild  = _client.Guilds.Where(g => g.Id == 611634254438465537).FirstOrDefault() as IGuild;            
             var emotes = guild.Emotes;
             var roles  = guild.Roles; 
-            if (arg1.Id == 282548374312452096)
+            if (arg1.Id == 612768518152388648)
             {
                 if (arg3.Emote.Name == "ham")
                 {                                       
