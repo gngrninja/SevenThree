@@ -56,9 +56,9 @@ namespace SevenThree.Services
             var roles  = guild.Roles; 
             if (arg1.Id == 612768518152388648)
             {
-                if (arg3.Emote.Name == "ham")
-                System.Console.WriteLine("ham");
+                if (arg3.Emote.Name == "ham")                
                 {                    
+                    System.Console.WriteLine("ham");
                     if (!arg3.User.Value.IsBot)
                     {
                         var user = arg3.User.Value as IGuildUser;
