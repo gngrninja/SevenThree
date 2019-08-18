@@ -32,6 +32,27 @@ namespace SevenThree.Modules
             _hamTestService  = services.GetRequiredService<HamTestService>();
         }
 
+        [Command("clearafter")]
+        [RequireUserPermission(GuildPermission.KickMembers)]        
+        public async Task ClearAfterTaken()
+        {
+            var sb = new StringBuilder();
+
+            var discordSettings = await _db.QuizSettings.Where(s => s.DiscordGuildId == Context.Guild.Id).FirstOrDefaultAsync();
+
+            if (discordSettings != null && discordSettings.ExtraChannelId != null || discordSettings.GeneralChannelId != null || discordSettings.TechChannelId != null)
+            {                
+                discordSettings.ClearAfterTaken = true;                
+                sb.AppendLine($"Test channel contents will be cleared upon test completion!");                
+            }        
+            else
+            {
+                sb.AppendLine("Please set a channel to a specific test before using this command!");
+            }
+            await _db.SaveChangesAsync();             
+            await ReplyAsync(sb.ToString());            
+        }
+
         [Command("stech")]
         [RequireUserPermission(GuildPermission.KickMembers)]
         public async Task SetTechChannel()        
