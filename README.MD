@@ -5,6 +5,10 @@ SevenThree (v0.1) is a ham radio Discord bot. You can use SevenThree to lookup c
 
 This is a very early revision of the bot, more features and changes will be coming.
 
+# Join the SevenThree Discord server!
+Come say hi, and take a test or two. This server will be the place to go for updates and help with SevenThree.
+https://discord.gg/EhvxYbx
+
 # Invite to your server
 If you'd like to try out the bot on your server, use this invite link: https://discordapp.com/oauth2/authorize?client_id=576992584602353684&scope=bot&permissions=52224
 
@@ -94,4 +98,4 @@ If you would like to change the prefix for this bot's commands, use:
 After using this command, be sure to remember the prefix you changed it to!
 
 # Issues / Feedback?
-Feel free to open up an issue against this repository, or message me on my discord server: https://gngr.ninja/discord
+Feel free to open up an issue against this repository, or ask on the Discord server, here: https://discord.gg/EhvxYbx.
