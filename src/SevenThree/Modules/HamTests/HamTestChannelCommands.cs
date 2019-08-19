@@ -42,7 +42,15 @@ namespace SevenThree.Modules
             var discordSettings = await _db.QuizSettings.Where(s => s.DiscordGuildId == Context.Guild.Id).FirstOrDefaultAsync();
 
             if (discordSettings != null && discordSettings.ExtraChannelId != null || discordSettings.GeneralChannelId != null || discordSettings.TechChannelId != null)
-            {                
+            {    
+                if (discordSettings.ClearAfterTaken == true)
+                {
+                    discordSettings.ClearAfterTaken = false;
+                }            
+                else
+                {
+                    discordSettings.ClearAfterTaken = true;      
+                }
                 discordSettings.ClearAfterTaken = true;                
                 sb.AppendLine($"Test channel contents will be cleared upon test completion!");                
             }        
