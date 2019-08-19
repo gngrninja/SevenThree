@@ -237,7 +237,10 @@ namespace SevenThree.Modules
             {
                 if (arg1.Id == CurMessage.Id)
                 {
-                    System.Console.WriteLine("!");                                
+                    if (arg3.Emote.Name == "🇦")          
+                    {
+                        System.Console.WriteLine("A!");
+                    }                   
                 }
             });
             return Task.CompletedTask;
