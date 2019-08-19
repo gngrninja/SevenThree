@@ -793,7 +793,7 @@ namespace SevenThree.Modules
 
         private async Task ClearChannel()
         {            
-            var settings = await _db.QuizSettings.Where(s => s.DiscordGuildId == Id).FirstOrDefaultAsync();
+            var settings = await _db.QuizSettings.Where(s => s.DiscordGuildId == _guild.Id).FirstOrDefaultAsync();
             if (settings != null && settings.ClearAfterTaken)
             {
                 if (_messages.Count > 100)
