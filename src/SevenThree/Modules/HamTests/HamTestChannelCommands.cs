@@ -50,8 +50,7 @@ namespace SevenThree.Modules
                 else
                 {
                     discordSettings.ClearAfterTaken = true;      
-                }
-                discordSettings.ClearAfterTaken = true;                
+                }                              
                 sb.AppendLine($"Test channel contents will be cleared upon test completion!");                
             }        
             else
