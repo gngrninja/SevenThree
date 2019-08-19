@@ -40,7 +40,9 @@ namespace SevenThree.Modules
         private bool _wasAnswered;
         private int _questionDelay;
         private List<IMessage> _messages;
+        private Emoji[] _emojiList;
 
+        public IMessage CurMessage { get; private set; }        
         public bool ShouldStopTest { get; private set; }
         public Questions CurrentQuestion { get; private set; }
         public List<Tuple<char, Answer>> Answers { get; private set; }
@@ -102,7 +104,14 @@ namespace SevenThree.Modules
             //_totalQuestions = questions.Count;
             _questionsAsked = new List<Questions>();   
             _questionDelay = 60000;   
-            _messages = new List<IMessage>();                                   
+            _messages = new List<IMessage>();  
+            _emojiList = new Emoji[4]
+            {
+                new Emoji("🇦"),
+                new Emoji("🇧"),
+                new Emoji("🇨"),
+                new Emoji("🇩")
+            };                           
         }
 
         public QuizUtil(
@@ -124,7 +133,14 @@ namespace SevenThree.Modules
             //_totalQuestions = questions.Count;
             _questionsAsked = new List<Questions>();        
             _isDmTest = true;    
-            _questionDelay = 60000;                        
+            _questionDelay = 60000;    
+            _emojiList = new Emoji[4]
+            {
+                new Emoji("🇦"),
+                new Emoji("🇧"),
+                new Emoji("🇨"),
+                new Emoji("🇩")
+            };                                     
         }        
 
         public void SetServer(ulong discordServer)
@@ -169,11 +185,11 @@ namespace SevenThree.Modules
                     
                     if (!string.IsNullOrEmpty(CurrentQuestion.FigureName))
                     {
-                        await SendReplyAsync(embed, true).ConfigureAwait(false);
+                        await SendQuestionWithReactions(embed, true).ConfigureAwait(false);
                     }
                     else
                     {
-                        await SendReplyAsync(embed, false).ConfigureAwait(false);
+                        await SendQuestionWithReactions(embed, false).ConfigureAwait(false);
                     }                                                            
                 }
                 catch (Exception ex)
@@ -185,7 +201,8 @@ namespace SevenThree.Modules
                 try 
                 {                
                     //listen for answers    
-                    _client.MessageReceived += ListenForAnswer;
+                    //_client.MessageReceived += ListenForAnswer;
+                    _client.ReactionAdded += ListenForReactionAdded;
                     IsActive = true;
                     try
                     {                        
@@ -198,15 +215,32 @@ namespace SevenThree.Modules
                 }   
                 finally
                 {     
-                    _client.MessageReceived -= ListenForAnswer;
+                    //_client.MessageReceived -= ListenForAnswer;
+                    _client.ReactionAdded -= ListenForReactionAdded;
                     IsActive = false;                         
                 }
                 if (!_tokenSource.IsCancellationRequested && !IsActive && !ShouldStopTest)
                 {       
+                    var message = CurMessage as IUserMessage;
+                    var reactions = message.GetReactionUsersAsync(_emojiList[0],1000,null);
+                    System.Console.WriteLine("Test");
                     await NoAnswer();                    
                 }
                 await Task.Delay(5000).ConfigureAwait(false);
             }                                        
+        }
+
+
+        private Task ListenForReactionAdded(Cacheable<IUserMessage, ulong> arg1, ISocketMessageChannel arg2, SocketReaction arg3)
+        {
+            var _ = Task.Run(async () =>
+            {
+                if (arg1.Id == CurMessage.Id)
+                {
+                    System.Console.WriteLine("!");                                
+                }
+            });
+            return Task.CompletedTask;
         }
 
         private async Task NoAnswer()
@@ -270,7 +304,7 @@ namespace SevenThree.Modules
                     IsInline = true
                 });
             }
-
+            
             Answers = answerOptions;
         }
 
@@ -623,6 +657,69 @@ namespace SevenThree.Modules
             return Task.CompletedTask;
         }
 
+        private Task SendQuestionWithReactions(EmbedBuilder embed, bool hasFigure)
+        {
+            var _ = Task.Run(async () => 
+            {
+                if (_channel != null)
+                {
+                    if (hasFigure)
+                    {
+                        var figure = _db.Figure.Include(t => t.Test).Where(f => f.FigureName == CurrentQuestion.FigureName).FirstOrDefault();
+                        if (figure != null)
+                        {                     
+                            var fileName = $"{figure.Test.TestName}_{figure.FigureName}.png";
+                            if (!File.Exists(fileName))
+                            {   
+                                await File.WriteAllBytesAsync(fileName, figure.FigureImage);         
+                            }                              
+                            embed.WithImageUrl($"attachment://{fileName}");
+                            var message = await _channel.SendFileAsync($"{fileName}", "", false, embed.Build());                            
+                            await message.AddReactionsAsync(_emojiList);
+                            _messages.Add(message);                
+                            File.Delete(fileName);
+                            CurMessage = message;
+                         }
+                    }
+                    else
+                    {
+                        var message = await _channel.SendMessageAsync(null, false, embed.Build());
+                        await message.AddReactionsAsync(_emojiList);
+                        _messages.Add(message);
+                        CurMessage = message;
+                    }                    
+                }
+                else if (_user != null)
+                {
+                    if (hasFigure)
+                    {
+                        var figure = _db.Figure.Include(t => t.Test).Where(f => f.FigureName == CurrentQuestion.FigureName).FirstOrDefault();
+                        if (figure != null)
+                        {                     
+                            var fileName = $"{figure.Test.TestName}_{figure.FigureName}.png";
+                            if (!File.Exists(fileName))
+                            {   
+                                await File.WriteAllBytesAsync(fileName, figure.FigureImage);         
+                            }             
+                            embed.WithImageUrl($"attachment://{fileName}");
+                            var message = await _user.SendFileAsync($"{fileName}", "", false, embed.Build());                            
+                            await message.AddReactionsAsync(_emojiList);
+                            _messages.Add(message);                                
+                            File.Delete(fileName);
+                            CurMessage = message;
+                         }
+                    }
+                    else
+                    {
+                        var message = await _user.SendMessageAsync(null, false, embed.Build());
+                        await message.AddReactionsAsync(_emojiList);     
+                        CurMessage = message;
+                    }                    
+                }                                 
+            });
+            return Task.CompletedTask;
+        }
+
         private async Task<List<Tuple<ulong, int>>> GetTopUsers()
         {
             var users = await _db.UserAnswer.Where(u => u.Quiz.QuizId == Quiz.QuizId).ToListAsync();            
@@ -793,30 +890,33 @@ namespace SevenThree.Modules
 
         private async Task ClearChannel()
         {            
-            var settings = await _db.QuizSettings.Where(s => s.DiscordGuildId == _guild.Id).FirstOrDefaultAsync();
-            if (settings != null && settings.ClearAfterTaken)
+            if (_guild != null)
             {
-                if (_messages.Count > 100)
+                var settings = await _db.QuizSettings.Where(s => s.DiscordGuildId == _guild.Id).FirstOrDefaultAsync();
+                if (settings != null && settings.ClearAfterTaken)
                 {
-                    do 
+                    if (_messages.Count > 100)
                     {
-                        if (_messages.Count > 100)
+                        do 
                         {
-                            var delMe = _messages.Take(100);
-                            await _channel.DeleteMessagesAsync(delMe);                
-                            _messages.RemoveRange(0, 100);
+                            if (_messages.Count > 100)
+                            {
+                                var delMe = _messages.Take(100);
+                                await _channel.DeleteMessagesAsync(delMe);                
+                                _messages.RemoveRange(0, 100);
+                            }
+                            else
+                            {
+                                await _channel.DeleteMessagesAsync(_messages); 
+                            }                        
                         }
-                        else
-                        {
-                            await _channel.DeleteMessagesAsync(_messages); 
-                        }                        
+                        while (_messages.Count > 100);                    
                     }
-                    while (_messages.Count > 100);                    
+                    else
+                    {
+                        await _channel.DeleteMessagesAsync(_messages);
+                    }                
                 }
-                else
-                {
-                    await _channel.DeleteMessagesAsync(_messages);
-                }                
             }
         }      
     }
