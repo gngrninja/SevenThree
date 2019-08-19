@@ -793,31 +793,34 @@ namespace SevenThree.Modules
 
         private async Task ClearChannel()
         {            
-            var settings = await _db.QuizSettings.Where(s => s.DiscordGuildId == _guild.Id).FirstOrDefaultAsync();
-            if (settings != null && settings.ClearAfterTaken)
+            if (_guild != null)
             {
-                if (_messages.Count > 100)
+                var settings = await _db.QuizSettings.Where(s => s.DiscordGuildId == _guild.Id).FirstOrDefaultAsync();
+                if (settings != null && settings.ClearAfterTaken)
                 {
-                    do 
+                    if (_messages.Count > 100)
                     {
-                        if (_messages.Count > 100)
+                        do 
                         {
-                            var delMe = _messages.Take(100);
-                            await _channel.DeleteMessagesAsync(delMe);                
-                            _messages.RemoveRange(0, 100);
+                            if (_messages.Count > 100)
+                            {
+                                var delMe = _messages.Take(100);
+                                await _channel.DeleteMessagesAsync(delMe);                
+                                _messages.RemoveRange(0, 100);
+                            }
+                            else
+                            {
+                                await _channel.DeleteMessagesAsync(_messages); 
+                            }                        
                         }
-                        else
-                        {
-                            await _channel.DeleteMessagesAsync(_messages); 
-                        }                        
+                        while (_messages.Count > 100);                    
                     }
-                    while (_messages.Count > 100);                    
+                    else
+                    {
+                        await _channel.DeleteMessagesAsync(_messages);
+                    }                
                 }
-                else
-                {
-                    await _channel.DeleteMessagesAsync(_messages);
-                }                
-            }
-        }      
+            }      
+        }          
     }
 }
