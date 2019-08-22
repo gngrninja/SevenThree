@@ -40,7 +40,7 @@ namespace SevenThree.Modules
         private bool _wasAnswered;
         private int _questionDelay;
         private List<IMessage> _messages;
-        private Emoji[] _emojiList;
+        private List<Tuple<Emoji, char>> _emojiList;
 
         public IMessage CurMessage { get; private set; }        
         public bool ShouldStopTest { get; private set; }
@@ -105,12 +105,12 @@ namespace SevenThree.Modules
             _questionsAsked = new List<Questions>();   
             _questionDelay = 60000;   
             _messages = new List<IMessage>();  
-            _emojiList = new Emoji[4]
+            _emojiList = new List<Tuple<Emoji, char>>
             {
-                new Emoji("🇦"),
-                new Emoji("🇧"),
-                new Emoji("🇨"),
-                new Emoji("🇩")
+                Tuple.Create(new Emoji("🇦"), 'A'),
+                Tuple.Create(new Emoji("🇧"), 'B'),
+                Tuple.Create(new Emoji("🇨"), 'C'),
+                Tuple.Create(new Emoji("🇩"), 'D')
             };                           
         }
 
@@ -134,12 +134,12 @@ namespace SevenThree.Modules
             _questionsAsked = new List<Questions>();        
             _isDmTest = true;    
             _questionDelay = 60000;    
-            _emojiList = new Emoji[4]
+            _emojiList = new List<Tuple<Emoji, char>>
             {
-                new Emoji("🇦"),
-                new Emoji("🇧"),
-                new Emoji("🇨"),
-                new Emoji("🇩")
+                Tuple.Create(new Emoji("🇦"), 'A'),
+                Tuple.Create(new Emoji("🇧"), 'B'),
+                Tuple.Create(new Emoji("🇨"), 'C'),
+                Tuple.Create(new Emoji("🇩"), 'D')
             };                                     
         }        
 
@@ -185,11 +185,11 @@ namespace SevenThree.Modules
                     
                     if (!string.IsNullOrEmpty(CurrentQuestion.FigureName))
                     {
-                        await SendQuestionWithReactions(embed, true).ConfigureAwait(false);
+                        await SendQuestionWithReactions(embed, true);
                     }
                     else
                     {
-                        await SendQuestionWithReactions(embed, false).ConfigureAwait(false);
+                        await SendQuestionWithReactions(embed, false);
                     }                                                            
                 }
                 catch (Exception ex)
@@ -222,7 +222,6 @@ namespace SevenThree.Modules
                 if (!_tokenSource.IsCancellationRequested && !IsActive && !ShouldStopTest)
                 {       
                     var message = CurMessage as IUserMessage;
-                    var reactions = message.GetReactionUsersAsync(_emojiList[0],1000,null);
                     System.Console.WriteLine("Test");
                     await NoAnswer();                    
                 }
@@ -231,17 +230,46 @@ namespace SevenThree.Modules
         }
 
 
-        private Task ListenForReactionAdded(Cacheable<IUserMessage, ulong> arg1, ISocketMessageChannel arg2, SocketReaction arg3)
+        private Task ListenForReactionAdded(Cacheable<IUserMessage, ulong> question, ISocketMessageChannel channel, SocketReaction reaction)
         {
             var _ = Task.Run(async () =>
             {
-                if (arg1.Id == CurMessage.Id)
+                try
                 {
-                    if (arg3.Emote.Name == "🇦")          
+                    if (reaction.User.Value.IsBot)
                     {
-                        System.Console.WriteLine("A!");
-                    }                   
+                        return;
+                    }
+                    var answered = false;
+                    if (IsActive && !_tokenSource.IsCancellationRequested)
+                    {
+                        if (question.Id == CurMessage.Id)
+                        {     
+                            UserAnswer userAnswered = null;
+                            userAnswered = await _db.UserAnswer.Where(a => a.Question == CurrentQuestion && a.UserId == (long)reaction.User.Value.Id && a.Quiz.QuizId == Quiz.QuizId).FirstOrDefaultAsync();                            
+                            char? answerChar = null;
+                            if (userAnswered == null)
+                            {
+                                answerChar = _emojiList.Where(e => e.Item1.Name == reaction.Emote.Name).FirstOrDefault().Item2;                                                                                                        
+                                _logger.LogInformation($"User answer -> {answerChar}");  
+                                var possibleAnswer = Answers.Where(w => w.Item1 == answerChar).Select(w => w.Item2).FirstOrDefault();                                    
+                                if (possibleAnswer.IsAnswer)
+                                {
+                                    answered = await UserAnsweredCorrectly(reaction.User.Value, answered, answerChar, possibleAnswer);
+                                }
+                                else
+                                {
+                                    await IncorrectAnswer(reaction.User.Value, answerChar);
+                                }
+                            }                          
+                        }
+                    }
                 }
+                catch
+                {
+
+                }
+
             });
             return Task.CompletedTask;
         }
@@ -490,6 +518,40 @@ namespace SevenThree.Modules
             }            
         }
 
+        private async Task IncorrectAnswer(IUser user, char? answerChar)
+        {
+            var answerText = new StringBuilder();
+            answerText.AppendLine($"Sorry -> **[{user.Mention}]** <-!");
+            answerText.AppendLine($"[*{answerChar}*] was not the right answer!");
+            if (!_isDmTest)
+            {
+                answerText.AppendLine("Please wait until the next question to try again.");
+            }  
+            else
+            {
+                var answer = Answers.Where(a => a.Item2.IsAnswer).FirstOrDefault();
+                if (answer != null)
+                {
+                    answerText.AppendLine($"The correct answer was [**{answer.Item1}**] -> [**{answer.Item2.AnswerText}**]");
+                }                
+                
+            }          
+            await user.SendMessageAsync(answerText.ToString());
+            _db.UserAnswer.Add(new UserAnswer
+            {
+                UserId = (long)user.Id,
+                UserName = user.Username,
+                Question = CurrentQuestion,
+                AnswerText = answerChar.ToString(),
+                Quiz = Quiz,
+                IsAnswer = false
+            });
+            await _db.SaveChangesAsync();
+            if (_isDmTest) {
+                _tokenSource.Cancel();
+            }            
+        }
+
         private async Task<bool> UserAnsweredCorrectly(SocketMessage msg, bool answered, char? answerChar, Answer possibleAnswer)
         {
             List<UserAnswer> correctAnswers = null;
@@ -535,6 +597,56 @@ namespace SevenThree.Modules
                         
             embed.Description = answerText.ToString();
             embed.ThumbnailUrl = msg.Author.GetAvatarUrl();
+            await SendReplyAsync(embed, false);
+            answered = true;
+            return answered;
+        }
+
+        private async Task<bool> UserAnsweredCorrectly(IUser user, bool answered, char? answerChar, Answer possibleAnswer)
+        {
+            List<UserAnswer> correctAnswers = null;
+            _db.UserAnswer.Add(
+                new UserAnswer
+                {
+                    UserId = (long)user.Id,
+                    UserName = user.Username,
+                    Question = CurrentQuestion,
+                    AnswerText = answerChar.ToString(),
+                    Quiz = Quiz,
+                    IsAnswer = true
+                });
+            await _db.SaveChangesAsync();
+            correctAnswers = await _db.UserAnswer.Where(u => (ulong)u.UserId == user.Id && u.IsAnswer && u.Quiz.QuizId == Quiz.QuizId).ToListAsync();
+            var embed = new EmbedBuilder();
+            embed.Title = "Question Answered Correctly!";
+            embed.WithColor(new Color(0, 255, 0));                        
+            var answerText = new StringBuilder();
+            answerText.AppendLine($"Congrats -> **[{user.Mention}]** <-");
+            answerText.AppendLine($"The question was -> [**{CurrentQuestion.QuestionText}**]");
+            answerText.AppendLine();
+            answerText.AppendLine($"You had the correct answer of [*{answerChar}*] -> [**{possibleAnswer.AnswerText}**]");
+
+            if (correctAnswers.Count == 1)
+            {
+                embed.WithFooter(
+                    new EmbedFooterBuilder
+                    {
+                        Text = $"[{user.Username}] has just one correct answer so far!"
+                    }
+                );
+            }
+            else if (correctAnswers.Count > 1)
+            {
+                embed.WithFooter(
+                    new EmbedFooterBuilder
+                    {
+                        Text = $"[{user.Username}] has [{correctAnswers.Count}] correct answers so far!"
+                    }
+                );
+            }
+                        
+            embed.Description = answerText.ToString();
+            embed.ThumbnailUrl = user.GetAvatarUrl();
             await SendReplyAsync(embed, false);
             answered = true;
             return answered;
@@ -664,6 +776,11 @@ namespace SevenThree.Modules
         {
             var _ = Task.Run(async () => 
             {
+                var emojiList = new List<Emoji>();
+                foreach (var emoji in _emojiList)
+                {
+                    emojiList.Add(emoji.Item1);
+                }
                 if (_channel != null)
                 {
                     if (hasFigure)
@@ -678,7 +795,7 @@ namespace SevenThree.Modules
                             }                              
                             embed.WithImageUrl($"attachment://{fileName}");
                             var message = await _channel.SendFileAsync($"{fileName}", "", false, embed.Build());                            
-                            await message.AddReactionsAsync(_emojiList);
+                            await message.AddReactionsAsync(emojiList.ToArray());
                             _messages.Add(message);                
                             File.Delete(fileName);
                             CurMessage = message;
@@ -687,7 +804,7 @@ namespace SevenThree.Modules
                     else
                     {
                         var message = await _channel.SendMessageAsync(null, false, embed.Build());
-                        await message.AddReactionsAsync(_emojiList);
+                        await message.AddReactionsAsync(emojiList.ToArray());
                         _messages.Add(message);
                         CurMessage = message;
                     }                    
@@ -706,7 +823,7 @@ namespace SevenThree.Modules
                             }             
                             embed.WithImageUrl($"attachment://{fileName}");
                             var message = await _user.SendFileAsync($"{fileName}", "", false, embed.Build());                            
-                            await message.AddReactionsAsync(_emojiList);
+                            await message.AddReactionsAsync(emojiList.ToArray());
                             _messages.Add(message);                                
                             File.Delete(fileName);
                             CurMessage = message;
@@ -715,7 +832,7 @@ namespace SevenThree.Modules
                     else
                     {
                         var message = await _user.SendMessageAsync(null, false, embed.Build());
-                        await message.AddReactionsAsync(_emojiList);     
+                        await message.AddReactionsAsync(emojiList.ToArray());     
                         CurMessage = message;
                     }                    
                 }                                 
