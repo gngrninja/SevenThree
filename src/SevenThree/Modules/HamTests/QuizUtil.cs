@@ -283,6 +283,11 @@ namespace SevenThree.Modules
             else if (usersLost.Count > 0 && usersWon.Count > 0)
             {
                 embed.WithColor(new Color(100, 155, 0)); 
+                sb.AppendLine("**__Answered Correctly:__**");
+                foreach (var user in usersWon)
+                {
+                    sb.AppendLine($"**{user.UserName}**");
+                }                   
                 sb.AppendLine("**__Answered Incorrectly:__**");
                 foreach (var user in usersLost)
                 {
