@@ -10,9 +10,9 @@ Come say hi, and take a test or two. This server will be the place to go for upd
 https://discord.gg/EhvxYbx
 
 # Invite to your server
-If you'd like to try out the bot on your server, use this invite link: https://discordapp.com/oauth2/authorize?client_id=576992584602353684&scope=bot&permissions=52224
+If you'd like to try out the bot on your server, use this invite link: https://discordapp.com/oauth2/authorize?client_id=576992584602353684&scope=bot&permissions=52288
 
-It will need permissions to read chat (so you can issue commands), post messages/embeds, and upload images(for questions that have diagrams associated with them).
+It will need permissions to read chat (so you can issue commands), post messages/embeds, add reactions, and upload images/files(for questions that have diagrams associated with them).
 
 # Help!
 ### Start a gamified test in a Discord channel
@@ -42,9 +42,7 @@ or
 
 ![tech](https://github.com/gngrninja/SevenThree/blob/master/media/tech_short.png?raw=true)
 
-Guessing is simple, just guess the letter of the answer. For tests in Discord channels, incorrect guesses will cause other guesses to be ignored until the next question is presented.
-
-![wrong](https://github.com/gngrninja/SevenThree/blob/master/media/wrong_answer.png?raw=true)
+Guessing is simple, just tap or click the appropriate letter! If everyone that has guessed during the test clicks the skip icon, it will proceed to the next question.
 
 ### Start a test with 10 questions lasting 15 seconds
 
