@@ -62,8 +62,7 @@ namespace SevenThree
 
                 // get the client service so we can start the bot up
                 var client = services.GetRequiredService<DiscordSocketClient>();
-                _client = client;
-
+                _client = client;                
                 // this is where we get the Token value from the configuration file, and start the bot
                 await client.LoginAsync(TokenType.Bot, _config["Token"]);
                 await client.StartAsync();
@@ -85,9 +84,10 @@ namespace SevenThree
             // the config we build is also added, which comes in handy for setting the command prefix!
 
             var services = new ServiceCollection()
+                .AddSingleton<DiscordSocketConfig>()
                 .AddSingleton<LoggingService>()
                 .AddSingleton(_config)
-                .AddSingleton<DiscordSocketClient>()
+                .AddSingleton<DiscordSocketClient>(client => new DiscordSocketClient(new DiscordSocketConfig {MessageCacheSize = 100}))
                 .AddLogging(configure => configure.AddSerilog())
                 .AddSingleton<CommandService>()
                 .AddSingleton<XmlServices>()
