@@ -161,21 +161,34 @@ namespace SevenThree.Modules
 
         public async Task StartGame(Quiz quiz, int numQuestions, string testName, int questionDelay)
         {
+            //set class fields/properties based on passed in parameters
+            //delay between questions
             _questionDelay = questionDelay;
+            //quiz association from db
             Quiz = quiz;  
+            //get test questions based on passed in parameters
             var testQuestions = await GetRandomQuestions(numQuestions, testName, figuresOnly: false); 
-            _questions = testQuestions;    
+            //set class field
+            _questions = testQuestions;  
+            //set the number of total quesitons  
             _totalQuestions = _questions.Count();                  
+
+            //now we will loop until the test should stop
             while (!ShouldStopTest)
             {
+                //stop the test if there are 0 questions left
                 if (_questions.Count == 0)
                 {
                     await StopQuiz().ConfigureAwait(false);
                     return;
                 }          
+                //get a token we can use and cancel if it is answered correctly
                 _tokenSource = new CancellationTokenSource();
+                //get a new random instance            
                 var random = new Random();
+                //get a random question out of the pool of ones left
                 CurrentQuestion = _questions[random.Next(_questions.Count)];               
+                //remove the question we are using from the pool
                 _questions.Remove(CurrentQuestion);
                 try
                 {
@@ -188,13 +201,14 @@ namespace SevenThree.Modules
                     //associate answers with letters (randomly)                    
                     await SetupAnswers(random, embed);
                     
+                    //send question information based on if there is a figure or not
                     if (!string.IsNullOrEmpty(CurrentQuestion.FigureName))
                     {
-                        await SendQuestionWithReactions(embed, true);
+                        await SendQuestionWithReactions(embed, hasFigure: true);
                     }
                     else
                     {
-                        await SendQuestionWithReactions(embed, false);
+                        await SendQuestionWithReactions(embed, hasFigure: false);
                     }                                                            
                 }
                 catch (Exception ex)
@@ -817,20 +831,6 @@ namespace SevenThree.Modules
 
         internal async Task StopQuiz()
         {          
-            int passingScore = 0;
-            switch (CurrentQuestion.Test.TestName)
-            {
-                case "extra":
-                {
-                    passingScore = 37;
-                    break;
-                }
-                default:
-                {
-                    passingScore = 26;
-                    break;
-                }
-            }
             //wrap quiz up here           
             QuizUtil trivia = null;
             _hamTestService.RunningTests.TryRemove(Id, out trivia);
@@ -862,9 +862,10 @@ namespace SevenThree.Modules
                     int i = 0;
                     string passFailEmoji = string.Empty;
                     foreach (var user in userResults)
-                    {
+                    {                        
                         i++;
-                        if (user.Item2 >= passingScore)
+                        var percentage = (user.Item2 / _totalQuestions) * 100;
+                        if (user.Item2 >= 74)
                         {
                             passFailEmoji = ":white_check_mark:";            
                         }
