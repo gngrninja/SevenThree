@@ -864,8 +864,8 @@ namespace SevenThree.Modules
                     foreach (var user in userResults)
                     {                        
                         i++;
-                        var percentage = (user.Item2 / _totalQuestions) * 100;
-                        if (user.Item2 >= 74)
+                        decimal percentage = ((decimal)user.Item2 / (decimal)_totalQuestions) * 100;
+                        if (percentage >= 74)
                         {
                             passFailEmoji = ":white_check_mark:";            
                         }
@@ -873,7 +873,7 @@ namespace SevenThree.Modules
                         {
                             passFailEmoji = ":no_entry_sign:";
                         }
-                        sb.AppendLine($"{GetNumberEmojiFromInt(i)} [**{users.Where(u => (ulong)u.UserId == user.Item1).FirstOrDefault().UserName}**] with [**{user.Item2}**] [{passFailEmoji}]");   
+                        sb.AppendLine($"{GetNumberEmojiFromInt(i)} [**{users.Where(u => (ulong)u.UserId == user.Item1).FirstOrDefault().UserName}**] with [**{user.Item2}**] [{passFailEmoji}] ({Math.Round(percentage,0)}%)");   
                     }
                     sb.AppendLine();
                     sb.AppendLine($"Thanks for taking the test! Happy learning.");
