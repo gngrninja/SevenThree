@@ -93,7 +93,7 @@ namespace SevenThree.Modules
             ulong id           
         )
         {
-            _logger = services.GetRequiredService<ILogger<CallAssociation>>();
+            _logger = services.GetRequiredService<ILogger<QuizUtil>>();
             _client = services.GetRequiredService<DiscordSocketClient>();
             _db = services.GetRequiredService<SevenThreeContext>();
             _hamTestService = services.GetRequiredService<HamTestService>();
@@ -124,7 +124,7 @@ namespace SevenThree.Modules
             ulong id
         )
         {
-            _logger = services.GetRequiredService<ILogger<CallAssociation>>();
+            _logger = services.GetRequiredService<ILogger<QuizUtil>>();
             _client = services.GetRequiredService<DiscordSocketClient>();
             _db = services.GetRequiredService<SevenThreeContext>();
             _hamTestService = services.GetRequiredService<HamTestService>();
