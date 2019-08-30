@@ -42,6 +42,7 @@ namespace SevenThree.Modules
         private List<IMessage> _messages;
         private List<Tuple<Emoji, char>> _emojiList;        
         private List<IUser> _skipUsers;
+        private QuizHelper _quizHelper;
 
         public IMessage CurMessage { get; private set; }        
         public bool ShouldStopTest { get; private set; }
@@ -114,7 +115,8 @@ namespace SevenThree.Modules
                 Tuple.Create(new Emoji("🇩"), 'D'),
                 Tuple.Create(new Emoji("\u23E9"),'S')
             };  
-            _skipUsers = new List<IUser>();                         
+            _skipUsers = new List<IUser>();     
+            _quizHelper = new QuizHelper();                    
         }
 
         public QuizUtil(
@@ -145,7 +147,8 @@ namespace SevenThree.Modules
                 Tuple.Create(new Emoji("🇩"), 'D'),
                 Tuple.Create(new Emoji("\u23E9"),'S'),                
             };          
-            _skipUsers = new List<IUser>();                           
+            _skipUsers = new List<IUser>();          
+            _quizHelper = new QuizHelper();                 
         }        
 
         public void SetServer(ulong discordServer)
@@ -862,18 +865,12 @@ namespace SevenThree.Modules
                     int i = 0;
                     string passFailEmoji = string.Empty;
                     foreach (var user in userResults)
-                    {                        
+                    {
                         i++;
-                        decimal percentage = ((decimal)user.Item2 / (decimal)_totalQuestions) * 100;
-                        if (percentage >= 74)
-                        {
-                            passFailEmoji = ":white_check_mark:";            
-                        }
-                        else
-                        {
-                            passFailEmoji = ":no_entry_sign:";
-                        }
-                        sb.AppendLine($"{GetNumberEmojiFromInt(i)} [**{users.Where(u => (ulong)u.UserId == user.Item1).FirstOrDefault().UserName}**] with [**{user.Item2}**] [{passFailEmoji}] ({Math.Round(percentage,0)}%)");   
+                        decimal percentage;
+                        percentage = ((decimal)user.Item2 / (decimal)_totalQuestions) * 100;
+                        passFailEmoji = _quizHelper.GetPassFail(percentage);
+                        sb.AppendLine($"{_quizHelper.GetNumberEmojiFromInt(i)} [**{users.Where(u => (ulong)u.UserId == user.Item1).FirstOrDefault().UserName}**] with [**{user.Item2}**] [{passFailEmoji}] ({Math.Round(percentage, 0)}%)");
                     }
                     sb.AppendLine();
                     sb.AppendLine($"Thanks for taking the test! Happy learning.");
@@ -886,91 +883,7 @@ namespace SevenThree.Modules
             embed.Description = "Nobody scored!";                        
             await SendReplyAsync(embed, false, false);
             await ClearChannel();
-        }       
-        
-        public string GetNumberEmojiFromInt(int number)
-        {
-            string numberEmoji = string.Empty;
-            switch (number)
-            {
-                case 1:
-                {
-                    numberEmoji = ":one:";
-                    break;
-                }
-                case 2:
-                {
-                    numberEmoji = ":two:";
-                    break;
-                }
-                case 3:
-                {
-                    numberEmoji = ":three:";
-                    break;
-                }
-                case 4:
-                {
-                    numberEmoji = ":four:";
-                    break;
-                }
-                case 5:
-                {
-                    numberEmoji = ":five:";
-                    break;
-                }
-                case 6:
-                {
-                    numberEmoji = ":six:";
-                    break;
-                }
-                case 7:
-                {
-                    numberEmoji = ":seven:";
-                    break;
-                }
-                case 8:
-                {
-                    numberEmoji = ":eight:";
-                    break;
-                }
-                case 9:
-                {
-                    numberEmoji = ":nine:";
-                    break;
-                }
-                case 10:
-                {
-                    numberEmoji = ":one::zero:";
-                    break;
-                }
-                case 11:
-                {
-                    numberEmoji = ":one::one:";
-                    break;
-                }
-                case 12:
-                {
-                    numberEmoji = ":one::two:";
-                    break;
-                }
-                case 13:
-                {
-                    numberEmoji = ":one::three:";
-                    break;
-                }
-                case 14:
-                {
-                    numberEmoji = ":one::four:";
-                    break;
-                }
-                default:
-                {
-                    numberEmoji = ":zero:";
-                    break;
-                }                                                                                                                                                                                
-            }
-            return numberEmoji;
-        } 
+        }
 
         private async Task<List<Questions>> GetRandomQuestions(int numQuestions, string testName, bool figuresOnly = false)        
         {       
