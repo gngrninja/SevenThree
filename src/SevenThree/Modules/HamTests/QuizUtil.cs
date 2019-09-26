@@ -251,10 +251,16 @@ namespace SevenThree.Modules
         private async Task SendQuestionResults()
         {
             var message = CurMessage as IUserMessage;
-            var answers = await _db.UserAnswer.Where(a => a.Question.QuestionId == CurrentQuestion.QuestionId).ToListAsync();
-            var sb = new StringBuilder();
+            var answers = await _db.UserAnswer.Where(a => a.Question.QuestionId == CurrentQuestion.QuestionId).ToListAsync();            
             var usersWon = await GetCorrectUsersFromQuestion();
             var usersLost = await GetIncorrectUsersFromQuestion();
+            EmbedBuilder embed = await GetQuestionResultsEmbed(usersWon, usersLost);
+            await SendReplyAsync(embed, false);
+        }
+
+        private async Task<EmbedBuilder> GetQuestionResultsEmbed(List<UserAnswer> usersWon, List<UserAnswer> usersLost)
+        {
+            var sb = new StringBuilder();
             var embed = new EmbedBuilder();
             embed.Title = $"Question [{CurrentQuestion.QuestionSection}] Results";
             embed.AddField
@@ -280,17 +286,17 @@ namespace SevenThree.Modules
                 foreach (var user in usersWon)
                 {
                     sb.AppendLine($"**{user.UserName}**");
-                }                
-                embed.WithColor(new Color(0, 255, 0));                
+                }
+                embed.WithColor(new Color(0, 255, 0));
             }
             else if (usersWon.Count == 0 && usersLost.Count == 0)
             {
-                embed.WithColor(new Color(255, 0, 0));                
+                embed.WithColor(new Color(255, 0, 0));
                 sb.AppendLine("**__Nobody answered the question =(__**");
             }
-            else if (usersLost.Count > 0 && usersWon.Count == 0) 
+            else if (usersLost.Count > 0 && usersWon.Count == 0)
             {
-                embed.WithColor(new Color(255, 0, 0)); 
+                embed.WithColor(new Color(255, 0, 0));
                 sb.AppendLine("**__Answered Incorrectly:__**");
                 foreach (var user in usersLost)
                 {
@@ -299,20 +305,20 @@ namespace SevenThree.Modules
             }
             else if (usersLost.Count > 0 && usersWon.Count > 0)
             {
-                embed.WithColor(new Color(100, 155, 0)); 
+                embed.WithColor(new Color(100, 155, 0));
                 sb.AppendLine("**__Answered Correctly:__**");
                 foreach (var user in usersWon)
                 {
                     sb.AppendLine($"**{user.UserName}**");
-                }                   
+                }
                 sb.AppendLine("**__Answered Incorrectly:__**");
                 foreach (var user in usersLost)
                 {
                     sb.AppendLine($"**{user.UserName}**");
-                }                
+                }
             }
             embed.Description = sb.ToString();
-            var usersCorrect = await GetTopUsers();            
+            var usersCorrect = await GetTopUsers();
             if (usersCorrect.Count > 0)
             {
                 var leader = usersCorrect[0];
@@ -326,7 +332,7 @@ namespace SevenThree.Modules
                         new EmbedFooterBuilder
                         {
                             Text = $"[{guildUser.Username}] is currently in the lead with [{numCorrect}] correct answers!",
-                            IconUrl = guildUser.GetAvatarUrl()                        
+                            IconUrl = guildUser.GetAvatarUrl()
                         }
                     );
                 }
@@ -337,10 +343,10 @@ namespace SevenThree.Modules
                         new EmbedFooterBuilder
                         {
                             Text = $"You have [{numCorrect}] right so far, [{_user.Username}]!",
-                            IconUrl = _user.GetAvatarUrl()                        
+                            IconUrl = _user.GetAvatarUrl()
                         }
-                    );      
-                }                                                                
+                    );
+                }
             }
             else
             {
@@ -349,12 +355,13 @@ namespace SevenThree.Modules
                     new EmbedFooterBuilder
                     {
                         Text = $"Nobody has any correct answers!",
-                        IconUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true"                     
+                        IconUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true"
                     }
                 );
-                
+
             }
-            await SendReplyAsync(embed, false);
+
+            return embed;
         }
 
         private Task ListenForReactionAdded(Cacheable<IUserMessage, ulong> question, ISocketMessageChannel channel, SocketReaction reaction)

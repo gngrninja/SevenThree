@@ -120,7 +120,7 @@ namespace SevenThree.Modules
 
         public async Task<QrzApiXml.QRZDatabase> GetCallInfo(string callsign)
         {            
-            QrzApiXml.QRZDatabase xmlResult = ConvertResultToXml(await QrzApiRequest(callsign, "callsign"));            
+            var xmlResult = ConvertResultToXml(await QrzApiRequest(callsign, "callsign"));            
             if (!string.IsNullOrEmpty(xmlResult.Session.Error))
             {
                 switch (xmlResult.Session.Error)
