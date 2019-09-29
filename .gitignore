@@ -9,3 +9,5 @@ Migrations/
 xmlExamples/
 *.old
 import/
+vs/
+/vs
