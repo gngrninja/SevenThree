@@ -852,7 +852,7 @@ namespace SevenThree.Modules
             quiz.IsActive = false;
             await _db.SaveChangesAsync();   
             var embed = new EmbedBuilder();
-            embed.Title = $"Test -> [{CurrentQuestion.Test.TestName}] Results!";
+            embed.Title = $"[{CurrentQuestion.Test.TestName}] [{CurrentQuestion.Test.FromDate.ToShortDateString()} -> {CurrentQuestion.Test.ToDate.ToShortDateString()}] Test Results!";
             embed.WithColor(new Color(0, 255, 0));
             var sb = new StringBuilder();
             sb.AppendLine($"Number of questions -> [**{_totalQuestions}**]");
