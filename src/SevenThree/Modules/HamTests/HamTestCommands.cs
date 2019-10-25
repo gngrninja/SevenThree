@@ -200,20 +200,25 @@ namespace SevenThree.Modules
                    return; 
                 } 
             }
+            var curFile = Directory.GetFiles($"import/{testName}").Where(f => f.Contains(testName) && f.Contains(".json")).FirstOrDefault();
+            var fileName = Path.GetFileNameWithoutExtension(curFile);
+            
+            DateTime startDate = DateTime.Parse(fileName.Split('_')[1]);
+            DateTime endDate = DateTime.Parse(fileName.Split('_')[2]);
 
             var test = _db.HamTest.Where(t => t.TestName == testName).FirstOrDefault();
-
             if (test == null)
             {
                 await _db.AddAsync(
                     new HamTest{
                         TestName = testName,
-                        TestDescription = testDesc
+                        TestDescription = testDesc,
+                        FromDate = startDate,
+                        ToDate = endDate
                     });
                 await _db.SaveChangesAsync();
             } 
             else {
-
                 //clear old test items
                 var figures = _db.Figure.Where(f => f.Test.TestName == testName).ToList();
                 if (figures != null)
@@ -245,10 +250,13 @@ namespace SevenThree.Modules
             }
 
             test = _db.HamTest.Where(t => t.TestName == testName).FirstOrDefault();
+            test.FromDate = startDate;
+            test.ToDate = endDate;
+            await _db.SaveChangesAsync();
             
             //get questions converted from json to C# objects
-            var question = QuestionIngest.FromJson(File.ReadAllText($"import/{testName}/{testName}.json"));             
-            
+            var question = QuestionIngest.FromJson(File.ReadAllText(curFile));  
+
             //loop through and add to the database
             foreach (var item in question)
             {                

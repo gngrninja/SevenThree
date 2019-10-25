@@ -10,5 +10,7 @@ namespace SevenThree.Database
         public int TestId { get; set; }                
         public string TestName { get; set; }
         public string TestDescription { get; set; }
+        public DateTime FromDate { get; set ; }
+        public DateTime ToDate { get; set; } 
     }
 }
