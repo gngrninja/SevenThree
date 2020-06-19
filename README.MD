@@ -1,9 +1,9 @@
 ![logo](https://github.com/gngrninja/SevenThree/blob/master/media/73.png?raw=true)
 
 # SevenThree
-SevenThree (v0.1) is a ham radio Discord bot. You can use SevenThree to lookup call signs, as well take practice tests with the technician, general, or extra class question pools!
+SevenThree is a ham radio Discord bot. You can use SevenThree to lookup call signs, as well take practice tests with the technician, general, or extra class question pools!
 
-This is a very early revision of the bot, more features and changes will be coming.
+(Updated to reflect the new Extra class question pool that expires June 30th 2024!)
 
 # Join the SevenThree Discord server!
 Come say hi, and take a test or two. This server will be the place to go for updates and help with SevenThree.
