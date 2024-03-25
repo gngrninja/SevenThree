@@ -22,6 +22,7 @@ using System.Xml;
 using System.Xml.Serialization;
 using System.Text;
 using SevenThree.Modules;
+using SevenThree.Modules.BandConditions;
 
 namespace SevenThree
 {
@@ -95,7 +96,8 @@ namespace SevenThree
                 .AddTransient<Quiz>()
                 .AddSingleton<QrzApi>()
                 .AddSingleton<HamTestService>()   
-                .AddSingleton<ReactionService>()             
+                .AddSingleton<ReactionService>()   
+                .AddSingleton<BandConditions>()          
                 .AddDbContext<SevenThreeContext>()         
                 .AddSingleton<CommandHandler>();
             

@@ -9,6 +9,8 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using System.IO;
+using Microsoft.CodeAnalysis;
 
 namespace SevenThree.Modules.BandConditions
 {
@@ -27,17 +29,25 @@ namespace SevenThree.Modules.BandConditions
         [Alias("conds")]
         public async Task GetConditions()
         {
-            var embed = new EmbedBuilder();
-            embed.Title = "Current ham radio conditions";
-            /* 
-            embed.Footer = new EmbedFooterBuilder
+            var conds = _services.GetRequiredService<BandConditions>();
+            var result = conds.GetConditionsHamQsl();
+            if (File.Exists(result))
             {
-                Text = "Data gathered from [HamQsl](https://www.hamqsl.com)"
-            };
-            */
-            embed.Description = "Data gathered from [HamQsl](https://www.hamqsl.com)";
-            embed.ImageUrl = _config["HamQslUrl"];
-            await ReplyAsync(null, false, embed.Build());        
+                var fileName = Path.GetFileName(result);
+                var embed = new EmbedBuilder();                        
+                embed.Title = "Current ham radio conditions";  
+                embed.Description = "Data gathered from [hamqsl](https://www.hamqsl.com)";               
+                embed.Footer = new EmbedFooterBuilder
+                {
+                    Text = "Data gathered from https://www.hamqsl.com"
+                };                
+                embed.ImageUrl = $"attachment://{fileName}";
+                await Context.Channel.SendFileAsync(result, null, false, embed.Build());        
+            }
+            else
+            {
+                await ReplyAsync("There was an error getting the conditions, please try again later.");
+            }            
         }
     }
 }

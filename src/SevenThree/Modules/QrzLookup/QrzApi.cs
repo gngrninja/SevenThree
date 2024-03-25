@@ -44,7 +44,7 @@ namespace SevenThree.Modules
             _baseUrl = _qrzApiData.ApiBaseUrl;
             _apiKey  = _qrzApiData.ApiKey;
 
-            this.GetCallInfo("kf7ign");
+            this.GetCallInfo("AI7SP");
         }
 
         public async Task GetKey()

@@ -10,6 +10,8 @@ using System.Collections.Generic;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System.Net;
+using System.IO;
+using Microsoft.AspNetCore.Routing.Constraints;
 
 namespace SevenThree.Modules.BandConditions
 {
@@ -28,11 +30,12 @@ namespace SevenThree.Modules.BandConditions
 
         public string GetConditionsHamQsl()
         {
+            var fileName = "conditions.gif";
             using (WebClient client = new WebClient()) 
             {
-                client.DownloadFileAsync(new Uri(_hamQslUrl), "conditions.gif");
+                client.DownloadFile(new Uri(_hamQslUrl), fileName);
             }
-            return "conditions.gif";
+            return $"{Environment.CurrentDirectory}/{fileName}";
         }
     }
 }
