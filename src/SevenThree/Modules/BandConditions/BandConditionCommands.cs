@@ -10,7 +10,6 @@ using System.Collections.Generic;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System.IO;
-using Microsoft.CodeAnalysis;
 
 namespace SevenThree.Modules.BandConditions
 {
