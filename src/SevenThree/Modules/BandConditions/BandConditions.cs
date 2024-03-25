@@ -12,6 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Net;
 using System.IO;
 using Microsoft.AspNetCore.Routing.Constraints;
+using System.Net.Http;
 
 namespace SevenThree.Modules.BandConditions
 {
@@ -28,14 +29,22 @@ namespace SevenThree.Modules.BandConditions
             _hamQslUrl = _config["HamQslUrl"];
         }
 
-        public string GetConditionsHamQsl()
+        public async Task<string> GetConditionsHamQsl()
         {
-            var fileName = "conditions.gif";
-            using (WebClient client = new WebClient()) 
+            var fileName = "conditions.gif";       
+            var filePath = Path.Combine(Environment.CurrentDirectory, fileName);
+            using (var client = new HttpClient())
             {
-                client.DownloadFile(new Uri(_hamQslUrl), fileName);
+                var response = await client.GetAsync(_hamQslUrl);
+                if (response.IsSuccessStatusCode)
+                {
+                    using (var fileStream = new FileStream(filePath, FileMode.Create))
+                    {
+                        await response.Content.CopyToAsync(fileStream);
+                    }
+                }
             }
-            return $"{Environment.CurrentDirectory}/{fileName}";
+            return filePath;            
         }
     }
 }

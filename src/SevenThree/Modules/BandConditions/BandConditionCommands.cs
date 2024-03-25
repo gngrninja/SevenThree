@@ -30,7 +30,7 @@ namespace SevenThree.Modules.BandConditions
         public async Task GetConditions()
         {
             var conds = _services.GetRequiredService<BandConditions>();
-            var result = conds.GetConditionsHamQsl();
+            var result = await conds.GetConditionsHamQsl();
             if (File.Exists(result))
             {
                 var fileName = Path.GetFileName(result);

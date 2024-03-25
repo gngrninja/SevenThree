@@ -5,9 +5,9 @@ obj/
 logs/
 *.log*
 Migrations/
-*.db
 xmlExamples/
 *.old
 import/
 .vs/
 /.vs
+*.db*
