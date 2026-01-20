@@ -1,8 +1,7 @@
 using Discord;
-using Discord.Commands;
+using Discord.Interactions;
 using Discord.WebSocket;
 using System;
-using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,17 +12,17 @@ namespace SevenThree.Services
     {
         private readonly ILogger _logger;
         private readonly DiscordSocketClient _discord;
-        private readonly CommandService _commands;
-        
+        private readonly InteractionService _interactions;
+
         public LoggingService(IServiceProvider services)
-        {            
-            _discord  = services.GetRequiredService<DiscordSocketClient>();
-            _commands = services.GetRequiredService<CommandService>();
-            _logger   = services.GetService<ILogger<LoggingService>>();
-            
+        {
+            _discord = services.GetRequiredService<DiscordSocketClient>();
+            _interactions = services.GetRequiredService<InteractionService>();
+            _logger = services.GetService<ILogger<LoggingService>>();
+
             _discord.Ready += OnReadyAsync;
             _discord.Log += OnLogAsync;
-            _commands.Log += OnLogAsync;
+            _interactions.Log += OnLogAsync;
         }
         
         public Task OnReadyAsync()

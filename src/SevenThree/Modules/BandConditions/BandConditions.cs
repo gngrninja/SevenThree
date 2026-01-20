@@ -1,7 +1,6 @@
 using Discord;
 using Discord.Net;
 using Discord.WebSocket;
-using Discord.Commands;
 using System;
 using System.Linq;
 using System.Text;

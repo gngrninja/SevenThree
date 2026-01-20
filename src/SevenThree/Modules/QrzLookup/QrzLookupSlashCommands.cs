@@ -1,42 +1,45 @@
 using Discord;
-using Discord.Net;
-using Discord.WebSocket;
-using Discord.Commands;
+using Discord.Interactions;
 using System;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
-using System.Collections.Generic;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace SevenThree.Modules
 {
-    public class QrzLookupCommands : ModuleBase
+    [Group("qrz", "QRZ.com callsign lookup commands")]
+    public class QrzLookupSlashCommands : InteractionModuleBase<SocketInteractionContext>
     {
         private readonly QrzApi _qrzApi;
-        private readonly ILogger _logger;
-        private readonly IConfiguration _config;
+        private readonly ILogger<QrzLookupSlashCommands> _logger;
 
-        public QrzLookupCommands(IServiceProvider services) 
+        public QrzLookupSlashCommands(IServiceProvider services)
         {
-            _config = services.GetRequiredService<IConfiguration>();
-            _logger = services.GetRequiredService<ILogger<QrzLookupCommands>>();
+            _logger = services.GetRequiredService<ILogger<QrzLookupSlashCommands>>();
             _qrzApi = services.GetRequiredService<QrzApi>();
         }
 
-        [Command("lookup")]
-        [Alias("qrz")]
-        public async Task LookupCall([Remainder] string callsign)
+        [SlashCommand("lookup", "Look up a ham radio callsign on QRZ.com")]
+        public async Task LookupCall(
+            [Summary("callsign", "The callsign to look up")] string callsign)
         {
+            if (!_qrzApi.IsConfigured)
+            {
+                await RespondAsync("QRZ API is not configured. Please set QRZ credentials in environment variables.", ephemeral: true);
+                return;
+            }
+
+            await DeferAsync(ephemeral: true);
+
             Models.QrzApiXml.QRZDatabase result = null;
             string callSignLong = string.Empty;
+
             if (callsign.Contains("/"))
             {
                 callSignLong = callsign;
                 callsign = callsign.Split('/')[0].Trim();
             }
+
             if (!string.IsNullOrEmpty(callSignLong))
             {
                 result = await _qrzApi.GetCallInfo(callSignLong);
@@ -50,45 +53,30 @@ namespace SevenThree.Modules
                 result = await _qrzApi.GetCallInfo(callsign);
             }
 
-            await SendCallEmbed(callsign, result);
+            await FollowupAsync(embed: BuildCallEmbed(callsign, result, Context.User));
         }
 
-        [Command("dxp")]
-        public async Task FindDxp([Remainder] string dxp)
+        [SlashCommand("dxcc", "Look up DXCC information")]
+        public async Task FindDxcc(
+            [Summary("dxcc", "The DXCC entity to look up")] string dxcc)
         {
+            if (!_qrzApi.IsConfigured)
+            {
+                await RespondAsync("QRZ API is not configured. Please set QRZ credentials in environment variables.", ephemeral: true);
+                return;
+            }
+
+            await DeferAsync(ephemeral: true);
+
             Models.QrzApiXml.QRZDatabase result = null;
             string callSignLong = string.Empty;
-            if (dxp.Contains("/"))
-            {
-                callSignLong = dxp;
-                dxp = dxp.Split('/')[1].Trim();
-            }
-            if (!string.IsNullOrEmpty(callSignLong))
-            {
-                result = await _qrzApi.GetCallInfo(callSignLong);
-                if (result.Session.Error != null && result.Session.Error.Contains("Not found:"))
-                {
-                    result = await _qrzApi.GetCallInfo(dxp);
-                }
-            }
-            else
-            {
-                result = await _qrzApi.GetCallInfo(dxp);
-            }      
 
-            await SendCallEmbed(dxp, result);      
-        }
-
-        [Command("dxcc")]
-        public async Task FindDxcc([Remainder] string dxcc)
-        {
-            Models.QrzApiXml.QRZDatabase result = null;
-            string callSignLong = string.Empty;
             if (dxcc.Contains("/"))
             {
                 callSignLong = dxcc;
-                dxcc = dxcc.Split('/')[0].Trim();                
-            }    
+                dxcc = dxcc.Split('/')[0].Trim();
+            }
+
             if (!string.IsNullOrEmpty(callSignLong))
             {
                 result = await _qrzApi.GetDxccInfo(callSignLong);
@@ -100,61 +88,56 @@ namespace SevenThree.Modules
             else
             {
                 result = await _qrzApi.GetDxccInfo(dxcc);
-            }     
+            }
+
             var embed = new EmbedBuilder();
             if (result.Session.Error == null)
-            {                
+            {
                 embed.Title = $"DXCC information for [{result.DXCC.Dxcc}]";
-
 
                 if (result.DXCC.Cc != null)
                 {
-                    embed.Fields.Add(new EmbedFieldBuilder{
+                    embed.Fields.Add(new EmbedFieldBuilder
+                    {
                         Name = "CC",
                         Value = $"{result.DXCC.Cc}",
                         IsInline = true
-                    }); 
+                    });
                 }
-                
-                embed.ThumbnailUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true";                 
+
+                embed.ThumbnailUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true";
                 embed.WithColor(new Color(0, 255, 50));
             }
-            else 
+            else
             {
                 embed.Title = $"Error looking up [{dxcc}]!";
-                embed.WithFields(
-                    new EmbedFieldBuilder
-                    {
-                        Name  = "Error Details",
-                        Value = result.Session.Error 
-                    }
-                );                
+                embed.WithFields(new EmbedFieldBuilder
+                {
+                    Name = "Error Details",
+                    Value = result.Session.Error
+                });
                 embed.WithColor(new Color(255, 0, 0));
             }
-                       
-            embed.WithAuthor(
-                new EmbedAuthorBuilder
-                {
-                    Name = $"Callsign look up performed by [{Context.User.Username}]!",
-                    IconUrl = Context.User.GetAvatarUrl()
-                }
-            );     
 
-            embed.WithFooter(
-                new EmbedFooterBuilder
-                {
-                    Text    = "SevenThree, your local ham radio Discord bot!",
-                    IconUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true"
-                }
-            );
+            embed.WithAuthor(new EmbedAuthorBuilder
+            {
+                Name = $"DXCC look up performed by [{Context.User.Username}]!",
+                IconUrl = Context.User.GetAvatarUrl()
+            });
 
-            embed.ThumbnailUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true";
+            embed.WithFooter(new EmbedFooterBuilder
+            {
+                Text = "SevenThree, your local ham radio Discord bot!",
+                IconUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true"
+            });
 
-            await ReplyAsync(null, false, embed.Build());                    
+            await FollowupAsync(embed: embed.Build());
         }
-        private async Task SendCallEmbed(string callsign, Models.QrzApiXml.QRZDatabase result)
+
+        private Embed BuildCallEmbed(string callsign, Models.QrzApiXml.QRZDatabase result, IUser user)
         {
             var embed = new EmbedBuilder();
+
             if (result.Session.Error == null)
             {
                 embed.Title = $"Callsign information for [{result.Callsign.Call}]";
@@ -208,15 +191,6 @@ namespace SevenThree.Modules
                         IsInline = true
                     });
                 }
-                else if (result.Callsign.Country != null)
-                {
-                    embed.Fields.Add(new EmbedFieldBuilder
-                    {
-                        Name = "Country",
-                        Value = $"{result.Callsign.Land}",
-                        IsInline = true
-                    });
-                }
 
                 if (result.Callsign.TimeZone != null)
                 {
@@ -258,46 +232,38 @@ namespace SevenThree.Modules
                 {
                     embed.ImageUrl = result.Callsign.Image;
                     embed.ThumbnailUrl = result.Callsign.Image;
-
                 }
                 else
                 {
                     embed.ThumbnailUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true";
                 }
+
                 embed.WithColor(new Color(0, 255, 50));
             }
             else
             {
                 embed.Title = $"Error looking up [{callsign}]!";
-                embed.WithFields(
-                    new EmbedFieldBuilder
-                    {
-                        Name = "Error Details",
-                        Value = result.Session.Error
-                    }
-                );
+                embed.WithFields(new EmbedFieldBuilder
+                {
+                    Name = "Error Details",
+                    Value = result.Session.Error
+                });
                 embed.WithColor(new Color(255, 0, 0));
             }
 
-            embed.WithAuthor(
-                new EmbedAuthorBuilder
-                {
-                    Name = $"Callsign look up performed by [{Context.User.Username}]!",
-                    IconUrl = Context.User.GetAvatarUrl()
-                }
-            );
+            embed.WithAuthor(new EmbedAuthorBuilder
+            {
+                Name = $"Callsign look up performed by [{user.Username}]!",
+                IconUrl = user.GetAvatarUrl()
+            });
 
-            embed.WithFooter(
-                new EmbedFooterBuilder
-                {
-                    Text = "SevenThree, your local ham radio Discord bot!",
-                    IconUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true"
-                }
-            );
+            embed.WithFooter(new EmbedFooterBuilder
+            {
+                Text = "SevenThree, your local ham radio Discord bot!",
+                IconUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true"
+            });
 
-            embed.ThumbnailUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true";
-
-            await ReplyAsync(null, false, embed.Build());
+            return embed.Build();
         }
     }
 }

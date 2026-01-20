@@ -4,15 +4,16 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SevenThree.Database;
+using SevenThree.Models;
 using Discord;
 using Discord.Net;
 using Discord.WebSocket;
-using Discord.Commands;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using System.Text;
 using System.IO;
+using SevenThree.Constants;
 using SevenThree.Services;
 
 namespace SevenThree.Modules
@@ -20,35 +21,34 @@ namespace SevenThree.Modules
     public class QuizUtil
     {
         private readonly SemaphoreSlim _guessLock = new SemaphoreSlim(1, 1);
-        private readonly SevenThreeContext _db;
+        private readonly IDbContextFactory<SevenThreeContext> _contextFactory;
         private bool _isActive = false;
         private bool _isDmTest = false;
         private ulong _discordServer;
         private ulong _id;
         private CancellationTokenSource _tokenSource;
         private ILogger _logger;
-        Timer _questionCountdown;
         private readonly DiscordSocketClient _client;
         private readonly IGuild _guild;
         private readonly ITextChannel _channel;
         private List<Questions> _questions;
         private readonly HamTestService _hamTestService;
         private List<Questions> _questionsAsked;
-        private readonly IUser _user;        
+        private readonly IUser _user;
         private int _totalQuestions;
-        private Quiz _quiz;
-        private bool _wasAnswered;
         private int _questionDelay;
         private List<IMessage> _messages;
-        private List<Tuple<Emoji, char>> _emojiList;        
         private List<IUser> _skipUsers;
         private QuizHelper _quizHelper;
+        private QuizMode _quizMode = QuizMode.Private;
+        private IUserMessage _currentButtonMessage;
 
-        public IMessage CurMessage { get; private set; }        
+        public IMessage CurMessage { get; private set; }
         public bool ShouldStopTest { get; private set; }
         public Questions CurrentQuestion { get; private set; }
         public List<Tuple<char, Answer>> Answers { get; private set; }
-        public Quiz Quiz { get; private set; }        
+        public Quiz Quiz { get; private set; }
+        public QuizMode Mode => _quizMode;        
 
 
         public bool IsActive
@@ -91,32 +91,22 @@ namespace SevenThree.Modules
             IGuild guild,
             ITextChannel channel,
             IServiceProvider services,
-            ulong id           
+            ulong id
         )
         {
             _logger = services.GetRequiredService<ILogger<QuizUtil>>();
             _client = services.GetRequiredService<DiscordSocketClient>();
-            _db = services.GetRequiredService<SevenThreeContext>();
+            _contextFactory = services.GetRequiredService<IDbContextFactory<SevenThreeContext>>();
             _hamTestService = services.GetRequiredService<HamTestService>();
 
             _guild = guild;
-            //_questions = questions;
-            _channel = channel;  
-            _id = id;              
-            //_totalQuestions = questions.Count;
-            _questionsAsked = new List<Questions>();   
-            _questionDelay = 60000;   
-            _messages = new List<IMessage>();  
-            _emojiList = new List<Tuple<Emoji, char>>
-            {
-                Tuple.Create(new Emoji("🇦"), 'A'),
-                Tuple.Create(new Emoji("🇧"), 'B'),
-                Tuple.Create(new Emoji("🇨"), 'C'),
-                Tuple.Create(new Emoji("🇩"), 'D'),
-                Tuple.Create(new Emoji("\u23E9"),'S')
-            };  
-            _skipUsers = new List<IUser>();     
-            _quizHelper = new QuizHelper();                    
+            _channel = channel;
+            _id = id;
+            _questionsAsked = new List<Questions>();
+            _questionDelay = 60000;
+            _messages = new List<IMessage>();
+            _skipUsers = new List<IUser>();
+            _quizHelper = new QuizHelper();
         }
 
         public QuizUtil(
@@ -128,27 +118,17 @@ namespace SevenThree.Modules
         {
             _logger = services.GetRequiredService<ILogger<QuizUtil>>();
             _client = services.GetRequiredService<DiscordSocketClient>();
-            _db = services.GetRequiredService<SevenThreeContext>();
+            _contextFactory = services.GetRequiredService<IDbContextFactory<SevenThreeContext>>();
             _hamTestService = services.GetRequiredService<HamTestService>();
 
             _guild = guild;
-            //_questions = questions;
-            _user = user;       
-            _id = id;   
-            //_totalQuestions = questions.Count;
-            _questionsAsked = new List<Questions>();        
-            _isDmTest = true;    
-            _questionDelay = 60000;    
-            _emojiList = new List<Tuple<Emoji, char>>
-            {
-                Tuple.Create(new Emoji("🇦"), 'A'),
-                Tuple.Create(new Emoji("🇧"), 'B'),
-                Tuple.Create(new Emoji("🇨"), 'C'),
-                Tuple.Create(new Emoji("🇩"), 'D'),
-                Tuple.Create(new Emoji("\u23E9"),'S'),                
-            };          
-            _skipUsers = new List<IUser>();          
-            _quizHelper = new QuizHelper();                 
+            _user = user;
+            _id = id;
+            _questionsAsked = new List<Questions>();
+            _isDmTest = true;
+            _questionDelay = 60000;
+            _skipUsers = new List<IUser>();
+            _quizHelper = new QuizHelper();
         }        
 
         public void SetServer(ulong discordServer)
@@ -207,51 +187,49 @@ namespace SevenThree.Modules
                     //send question information based on if there is a figure or not
                     if (!string.IsNullOrEmpty(CurrentQuestion.FigureName))
                     {
-                        await SendQuestionWithReactions(embed, hasFigure: true);
+                        await SendQuestionWithButtons(embed, hasFigure: true);
                     }
                     else
                     {
-                        await SendQuestionWithReactions(embed, hasFigure: false);
-                    }                                                            
+                        await SendQuestionWithButtons(embed, hasFigure: false);
+                    }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex.Message);
                     await Task.Delay(5000).ConfigureAwait(false);
                     continue;
-                }                        
-                try 
-                {                
-                    //listen for answers via reactions                      
-                    _client.ReactionAdded += ListenForReactionAdded;
+                }
+                try
+                {
+                    // For button mode, we wait for button clicks via QuizButtonHandler
+                    // which will cancel the token when an answer is received
                     IsActive = true;
                     try
-                    {                        
-                        await Task.Delay(_questionDelay, _tokenSource.Token).ConfigureAwait(false);                        
-                    }        
+                    {
+                        await Task.Delay(_questionDelay, _tokenSource.Token).ConfigureAwait(false);
+                    }
                     catch (TaskCanceledException)
                     {
-                        //answered correctly                       
+                        // Answer received via button click
                     }
-                }   
+                }
                 finally
-                {                         
-                    _client.ReactionAdded -= ListenForReactionAdded;
-                    IsActive = false;   
-                    if (!ShouldStopTest)
+                {
+                    IsActive = false;
+                    if (!ShouldStopTest && _quizMode == QuizMode.Public)
                     {
-                        await SendQuestionResults();                         
-                    }          
-                               
-                } 
-                await Task.Delay(5000).ConfigureAwait(false);                             
+                        await SendQuestionResults();
+                    }
+                }
+                // Auto-advance delay (3 seconds for button mode)
+                await Task.Delay(3000).ConfigureAwait(false);                             
             }                                        
         }
 
         private async Task SendQuestionResults()
         {
             var message = CurMessage as IUserMessage;
-            var answers = await _db.UserAnswer.Where(a => a.Question.QuestionId == CurrentQuestion.QuestionId).ToListAsync();            
             var usersWon = await GetCorrectUsersFromQuestion();
             var usersLost = await GetIncorrectUsersFromQuestion();
             EmbedBuilder embed = await GetQuestionResultsEmbed(usersWon, usersLost);
@@ -268,15 +246,19 @@ namespace SevenThree.Modules
                 new EmbedFieldBuilder
                 {
                     Name = "Question:",
-                    Value = $"**{CurrentQuestion.QuestionText}**"
+                    Value = $"**{CurrentQuestion.QuestionText ?? "Question not available"}**"
                 }
             );
+            var correctAnswer = Answers.FirstOrDefault(a => a.Item2.IsAnswer);
+            var answerValue = correctAnswer != null
+                ? $"**{correctAnswer.Item1}**. *{correctAnswer.Item2.AnswerText ?? "Answer text not available"}*"
+                : "Correct answer not found";
             embed.AddField
             (
                 new EmbedFieldBuilder
                 {
                     Name = "Answer:",
-                    Value = $"**{Answers.Where(a => a.Item2.IsAnswer).FirstOrDefault().Item1}**. *{Answers.Where(a => a.Item2.IsAnswer).FirstOrDefault().Item2.AnswerText}*"
+                    Value = answerValue
                 }
             );
             embed.ThumbnailUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true";
@@ -331,8 +313,8 @@ namespace SevenThree.Modules
                     (
                         new EmbedFooterBuilder
                         {
-                            Text = $"[{guildUser.Username}] is currently in the lead with [{numCorrect}] correct answers!",
-                            IconUrl = guildUser.GetAvatarUrl()
+                            Text = $"[{guildUser?.Username ?? "Unknown"}] is currently in the lead with [{numCorrect}] correct answers!",
+                            IconUrl = guildUser?.GetAvatarUrl() ?? guildUser?.GetDefaultAvatarUrl()
                         }
                     );
                 }
@@ -343,7 +325,7 @@ namespace SevenThree.Modules
                         new EmbedFooterBuilder
                         {
                             Text = $"You have [{numCorrect}] right so far, [{_user.Username}]!",
-                            IconUrl = _user.GetAvatarUrl()
+                            IconUrl = _user.GetAvatarUrl() ?? _user.GetDefaultAvatarUrl()
                         }
                     );
                 }
@@ -364,84 +346,6 @@ namespace SevenThree.Modules
             return embed;
         }
 
-        private Task ListenForReactionAdded(Cacheable<IUserMessage, ulong> question, ISocketMessageChannel channel, SocketReaction reaction)
-        {
-            var _ = Task.Run(async () =>
-            {                
-                try
-                {                    
-                    if (reaction.User.Value.IsBot)
-                    {
-                        return;
-                    }            
-                    var answered = false;        
-                    await _guessLock.WaitAsync().ConfigureAwait(false);
-                    try
-                    {
-                        if (IsActive && !_tokenSource.IsCancellationRequested)
-                        {
-                            if (question.Id == CurMessage.Id)
-                            {              
-                                if (_skipUsers.Count > 0)
-                                {
-                                    var numSkip = question.Value.Reactions.Where(r => r.Key.Name == _emojiList.Last().Item1.Name).FirstOrDefault().Value.ReactionCount - 1;
-                                    var skipChar = _emojiList.Where(e => reaction.Emote.Name == e.Item1.Name).FirstOrDefault();                                    
-                                    if (skipChar.Item2 == 'S' && _skipUsers.Contains(reaction.User.Value) && numSkip == _skipUsers.Count)
-                                    {
-                                        _tokenSource.Cancel();
-                                        return;
-                                    } 
-                                }                      
-                                UserAnswer userAnswered = null;
-                                userAnswered = await _db.UserAnswer.Where(a => a.Question == CurrentQuestion && a.UserId == (long)reaction.User.Value.Id && a.Quiz.QuizId == Quiz.QuizId).FirstOrDefaultAsync();                            
-                                char? answerChar = null;
-                                if (userAnswered == null)
-                                {
-                                    answerChar = _emojiList.Where(e => e.Item1.Name == reaction.Emote.Name).FirstOrDefault().Item2;                                                                                                        
-                                    _logger.LogInformation($"User answer -> {answerChar}");  
-                                    var possibleAnswer = Answers.Where(w => w.Item1 == answerChar).Select(w => w.Item2).FirstOrDefault();                                    
-                                    if (possibleAnswer.IsAnswer)
-                                    {
-                                        answered = await UserAnsweredCorrectly(reaction.User.Value, answered, answerChar, possibleAnswer);
-                                        if (!_skipUsers.Contains(reaction.User.Value))
-                                        {
-                                            _skipUsers.Add(reaction.User.Value);
-                                        }
-                                        
-                                    }
-                                    else
-                                    {
-                                        await IncorrectAnswer(reaction.User.Value, answerChar);
-                                        if (!_skipUsers.Contains(reaction.User.Value))
-                                        {
-                                            _skipUsers.Add(reaction.User.Value);
-                                        }
-                                    }
-                                }                          
-                            }
-                        }
-                    }
-                    finally
-                    {
-                        _guessLock.Release(); 
-                    }
-                    if (!answered)
-                    {
-                        return;
-                    }
-                    if (_user != null)
-                    {
-                        _tokenSource.Cancel();
-                    }                                     
-                }    
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex.Message);
-                }  
-            });
-            return Task.CompletedTask;
-        }
-
         private async Task SetupAnswers(Random random, EmbedBuilder embed)
         {
             var answerOptions = new List<Tuple<char, Answer>>();
@@ -449,7 +353,8 @@ namespace SevenThree.Modules
             var usedNumbers = new List<int>();
             var usedLetters = new List<char>();
 
-            var answers = await _db.Answer.Where(a => a.Question.QuestionId == CurrentQuestion.QuestionId).ToListAsync();
+            using var db = _contextFactory.CreateDbContext();
+            var answers = await db.Answer.Where(a => a.Question.QuestionId == CurrentQuestion.QuestionId).ToListAsync();
 
             bool addingAnswers = true;
             int i = 0;
@@ -479,7 +384,7 @@ namespace SevenThree.Modules
                 embed.AddField(new EmbedFieldBuilder
                 {
                     Name = $"{letter}.",
-                    Value = answerData.AnswerText,
+                    Value = answerData.AnswerText ?? "No answer text",
                     IsInline = true
                 });
             }
@@ -494,8 +399,8 @@ namespace SevenThree.Modules
             embed.WithAuthor(
                 new EmbedAuthorBuilder
                 {
-                    Name    = $"Test started by [{Quiz.StartedByName}]",
-                    IconUrl = Quiz.StartedByIconUrl    
+                    Name    = $"Test started by [{Quiz.StartedByName ?? "Unknown"}]",
+                    IconUrl = Quiz.StartedByIconUrl
                 }
             );
             embed.Title = $"Question: [{CurrentQuestion.QuestionSection}] From Test: [{CurrentQuestion.Test.TestName}]!";
@@ -524,7 +429,7 @@ namespace SevenThree.Modules
                 }
             }
 
-            if (CurrentQuestion.FccPart != null)
+            if (!string.IsNullOrWhiteSpace(CurrentQuestion.FccPart))
             {
                 embed.AddField(new EmbedFieldBuilder
                 {
@@ -535,14 +440,14 @@ namespace SevenThree.Modules
 
             embed.AddField(new EmbedFieldBuilder
             {
-                Name = $"Subelement [**{CurrentQuestion.SubelementName}**]",
-                Value = CurrentQuestion.SubelementDesc
+                Name = $"Subelement [**{CurrentQuestion.SubelementName ?? "Unknown"}**]",
+                Value = CurrentQuestion.SubelementDesc ?? "No description available"
             });
 
             embed.AddField(new EmbedFieldBuilder
             {
                 Name = $"Question:",
-                Value = $"**{CurrentQuestion.QuestionText}**",
+                Value = $"**{CurrentQuestion.QuestionText ?? "Question not available"}**",
                 IsInline = false
             });
 
@@ -557,7 +462,10 @@ namespace SevenThree.Modules
        
         private async Task IncorrectAnswer(SocketMessage msg, char? answerChar)
         {
-            _db.UserAnswer.Add(new UserAnswer
+            using var db = _contextFactory.CreateDbContext();
+            db.Attach(CurrentQuestion);
+            db.Attach(Quiz);
+            db.UserAnswer.Add(new UserAnswer
             {
                 UserId = (long)msg.Author.Id,
                 UserName = msg.Author.Username,
@@ -566,15 +474,19 @@ namespace SevenThree.Modules
                 Quiz = Quiz,
                 IsAnswer = false
             });
-            await _db.SaveChangesAsync();
-            if (_isDmTest) {
+            await db.SaveChangesAsync();
+            if (_isDmTest)
+            {
                 _tokenSource.Cancel();
-            }            
+            }
         }
 
         private async Task IncorrectAnswer(IUser user, char? answerChar)
         {
-            _db.UserAnswer.Add(new UserAnswer
+            using var db = _contextFactory.CreateDbContext();
+            db.Attach(CurrentQuestion);
+            db.Attach(Quiz);
+            db.UserAnswer.Add(new UserAnswer
             {
                 UserId = (long)user.Id,
                 UserName = user.Username,
@@ -583,27 +495,233 @@ namespace SevenThree.Modules
                 Quiz = Quiz,
                 IsAnswer = false
             });
-            await _db.SaveChangesAsync();
-            if (_isDmTest) {
+            await db.SaveChangesAsync();
+            if (_isDmTest)
+            {
                 _tokenSource.Cancel();
-            }            
+            }
         }
 
         private async Task<bool> UserAnsweredCorrectly(IUser user, bool answered, char? answerChar, Answer possibleAnswer)
-        {            
-            _db.UserAnswer.Add(
-                new UserAnswer
+        {
+            using var db = _contextFactory.CreateDbContext();
+            db.Attach(CurrentQuestion);
+            db.Attach(Quiz);
+            db.UserAnswer.Add(new UserAnswer
+            {
+                UserId = (long)user.Id,
+                UserName = user.Username,
+                Question = CurrentQuestion,
+                AnswerText = answerChar.ToString(),
+                Quiz = Quiz,
+                IsAnswer = true
+            });
+            await db.SaveChangesAsync();
+            answered = true;
+            return answered;
+        }
+
+        /// <summary>
+        /// Sets the quiz mode (Private or Public)
+        /// </summary>
+        public void SetQuizMode(QuizMode mode)
+        {
+            _quizMode = mode;
+        }
+
+        /// <summary>
+        /// Process a button answer click from the QuizButtonHandler
+        /// </summary>
+        public async Task ProcessButtonAnswerAsync(SocketMessageComponent component, string answerLetter, ulong userId)
+        {
+            await _guessLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                if (!IsActive || CurrentQuestion == null)
+                {
+                    await component.FollowupAsync("This question is no longer active.", ephemeral: true);
+                    return;
+                }
+
+                // For private mode, verify it's the quiz owner
+                if (_quizMode == QuizMode.Private && userId != Quiz.StartedById)
+                {
+                    await component.FollowupAsync("This is not your quiz.", ephemeral: true);
+                    return;
+                }
+
+                using var db = _contextFactory.CreateDbContext();
+
+                // Check if user already answered this question
+                var userAnswered = await db.UserAnswer
+                    .Where(a => a.Question.QuestionId == CurrentQuestion.QuestionId && a.UserId == (long)userId && a.Quiz.QuizId == Quiz.QuizId)
+                    .FirstOrDefaultAsync();
+
+                if (userAnswered != null)
+                {
+                    await component.FollowupAsync("You already answered this question!", ephemeral: true);
+                    return;
+                }
+
+                // Find the answer by letter
+                var answerChar = answerLetter.ToUpper()[0];
+                var selectedAnswer = Answers.FirstOrDefault(a => a.Item1 == answerChar);
+
+                if (selectedAnswer == null)
+                {
+                    await component.FollowupAsync("Invalid answer selection.", ephemeral: true);
+                    return;
+                }
+
+                var user = component.User;
+                var isCorrect = selectedAnswer.Item2.IsAnswer;
+
+                // Attach entities from other context for FK resolution
+                db.Attach(CurrentQuestion);
+                db.Attach(Quiz);
+
+                // Save the answer
+                db.UserAnswer.Add(new UserAnswer
                 {
                     UserId = (long)user.Id,
                     UserName = user.Username,
                     Question = CurrentQuestion,
                     AnswerText = answerChar.ToString(),
                     Quiz = Quiz,
-                    IsAnswer = true
+                    IsAnswer = isCorrect
                 });
-            await _db.SaveChangesAsync();
-            answered = true;
-            return answered;
+                await db.SaveChangesAsync();
+
+                // Build result embed
+                var resultEmbed = BuildAnswerResultEmbed(isCorrect, answerChar, selectedAnswer.Item2);
+
+                // Disable buttons on the original message
+                var disabledButtons = BuildDisabledAnswerButtons(answerChar, isCorrect);
+
+                // Update the message with disabled buttons and result
+                if (_currentButtonMessage != null)
+                {
+                    await _currentButtonMessage.ModifyAsync(m =>
+                    {
+                        m.Components = disabledButtons;
+                    });
+                }
+
+                // Send result as followup
+                await component.FollowupAsync(embed: resultEmbed.Build(), ephemeral: _quizMode == QuizMode.Private);
+
+                // Cancel the timeout to advance to next question
+                _tokenSource?.Cancel();
+            }
+            finally
+            {
+                _guessLock.Release();
+            }
+        }
+
+        /// <summary>
+        /// Build the answer buttons for a question
+        /// </summary>
+        public MessageComponent BuildAnswerButtons()
+        {
+            var builder = new ComponentBuilder();
+
+            foreach (var answer in Answers)
+            {
+                var customId = $"{QuizConstants.BUTTON_PREFIX}:{Id}:{answer.Item1}";
+                builder.WithButton(
+                    label: answer.Item1.ToString(),
+                    customId: customId,
+                    style: ButtonStyle.Primary,
+                    row: 0
+                );
+            }
+
+            // Add stop button on row 1
+            builder.WithButton(
+                label: "Stop Quiz",
+                customId: $"{QuizConstants.STOP_BUTTON_PREFIX}:{Id}",
+                style: ButtonStyle.Danger,
+                row: 1
+            );
+
+            return builder.Build();
+        }
+
+        /// <summary>
+        /// Build disabled buttons showing which answer was selected
+        /// </summary>
+        private MessageComponent BuildDisabledAnswerButtons(char selectedAnswer, bool wasCorrect)
+        {
+            var builder = new ComponentBuilder();
+            var correctAnswer = Answers.FirstOrDefault(a => a.Item2.IsAnswer);
+
+            foreach (var answer in Answers)
+            {
+                var style = ButtonStyle.Secondary; // Default grey
+                if (answer.Item1 == selectedAnswer)
+                {
+                    style = wasCorrect ? ButtonStyle.Success : ButtonStyle.Danger;
+                }
+                else if (answer.Item2.IsAnswer)
+                {
+                    style = ButtonStyle.Success; // Show correct answer in green
+                }
+
+                builder.WithButton(
+                    label: answer.Item1.ToString(),
+                    customId: $"{QuizConstants.BUTTON_PREFIX}:disabled:{answer.Item1}",
+                    style: style,
+                    disabled: true,
+                    row: 0
+                );
+            }
+
+            // Add disabled stop button on row 1
+            builder.WithButton(
+                label: "Stop Quiz",
+                customId: $"{QuizConstants.STOP_BUTTON_PREFIX}:disabled",
+                style: ButtonStyle.Secondary,
+                disabled: true,
+                row: 1
+            );
+
+            return builder.Build();
+        }
+
+        /// <summary>
+        /// Build an embed showing if the answer was correct
+        /// </summary>
+        private EmbedBuilder BuildAnswerResultEmbed(bool isCorrect, char selectedAnswer, Answer selectedAnswerData)
+        {
+            var embed = new EmbedBuilder();
+            var correctAnswer = Answers.FirstOrDefault(a => a.Item2.IsAnswer);
+
+            if (isCorrect)
+            {
+                embed.WithColor(new Color(0, 255, 0));
+                embed.Title = "Correct!";
+                embed.Description = $"**{selectedAnswer}**. {selectedAnswerData.AnswerText ?? "Answer text not available"}";
+            }
+            else
+            {
+                embed.WithColor(new Color(255, 0, 0));
+                embed.Title = "Incorrect";
+                embed.Description = $"You answered: **{selectedAnswer}**\n\n" +
+                    $"Correct answer: **{correctAnswer?.Item1}**. {correctAnswer?.Item2.AnswerText ?? "Answer text not available"}";
+            }
+
+            embed.WithFooter($"Question {_questionsAsked.Count} of {_totalQuestions}");
+
+            return embed;
+        }
+
+        /// <summary>
+        /// Store the current button message for later modification
+        /// </summary>
+        public void SetCurrentButtonMessage(IUserMessage message)
+        {
+            _currentButtonMessage = message;
         }
 
         private Task SendReplyAsync(string message)
@@ -624,244 +742,241 @@ namespace SevenThree.Modules
 
         private Task SendReplyAsync(EmbedBuilder embed, bool hasFigure)
         {
-            var _ = Task.Run(async () => 
+            var _ = Task.Run(async () =>
             {
                 if (_channel != null)
                 {
                     if (hasFigure)
                     {
-                        var figure = _db.Figure.Include(t => t.Test).Where(f => f.FigureName == CurrentQuestion.FigureName).FirstOrDefault();
+                        using var db = _contextFactory.CreateDbContext();
+                        var figure = db.Figure.Include(t => t.Test).Where(f => f.FigureName == CurrentQuestion.FigureName).FirstOrDefault();
                         if (figure != null)
-                        {                     
+                        {
                             var fileName = $"{figure.Test.TestName}_{figure.FigureName}.png";
                             if (!File.Exists(fileName))
-                            {   
-                                await File.WriteAllBytesAsync(fileName, figure.FigureImage);         
-                            }                              
+                            {
+                                await File.WriteAllBytesAsync(fileName, figure.FigureImage);
+                            }
                             embed.WithImageUrl($"attachment://{fileName}");
-                            _messages.Add(await _channel.SendFileAsync($"{fileName}", "", false, embed.Build()));                
+                            _messages.Add(await _channel.SendFileAsync($"{fileName}", "", false, embed.Build()));
                             File.Delete(fileName);
-                         }
+                        }
                     }
                     else
                     {
                         _messages.Add(await _channel.SendMessageAsync(null, false, embed.Build()));
-                    }                    
+                    }
                 }
                 else if (_user != null)
                 {
                     if (hasFigure)
                     {
-                        var figure = _db.Figure.Include(t => t.Test).Where(f => f.FigureName == CurrentQuestion.FigureName).FirstOrDefault();
+                        using var db = _contextFactory.CreateDbContext();
+                        var figure = db.Figure.Include(t => t.Test).Where(f => f.FigureName == CurrentQuestion.FigureName).FirstOrDefault();
                         if (figure != null)
-                        {                     
+                        {
                             var fileName = $"{figure.Test.TestName}_{figure.FigureName}.png";
                             if (!File.Exists(fileName))
-                            {   
-                                await File.WriteAllBytesAsync(fileName, figure.FigureImage);         
-                            }             
+                            {
+                                await File.WriteAllBytesAsync(fileName, figure.FigureImage);
+                            }
                             embed.WithImageUrl($"attachment://{fileName}");
-                            _messages.Add(await _user.SendFileAsync($"{fileName}", "", false, embed.Build()));                                
+                            _messages.Add(await _user.SendFileAsync($"{fileName}", "", false, embed.Build()));
                             File.Delete(fileName);
-                         }
+                        }
                     }
                     else
                     {
                         await _user.SendMessageAsync(null, false, embed.Build());
-                    }                    
-                } 
+                    }
+                }
             });
             return Task.CompletedTask;
         }
 
         private Task SendReplyAsync(EmbedBuilder embed, bool hasFigure, bool delete)
         {
-            var _ = Task.Run(async () => 
+            var _ = Task.Run(async () =>
             {
                 if (_channel != null)
                 {
                     if (hasFigure)
                     {
-                        var figure = _db.Figure.Include(t => t.Test).Where(f => f.FigureName == CurrentQuestion.FigureName).FirstOrDefault();
+                        using var db = _contextFactory.CreateDbContext();
+                        var figure = db.Figure.Include(t => t.Test).Where(f => f.FigureName == CurrentQuestion.FigureName).FirstOrDefault();
                         if (figure != null)
-                        {                     
+                        {
                             var fileName = $"{figure.Test.TestName}_{figure.FigureName}.png";
                             if (!File.Exists(fileName))
-                            {   
-                                await File.WriteAllBytesAsync(fileName, figure.FigureImage);         
-                            }                              
+                            {
+                                await File.WriteAllBytesAsync(fileName, figure.FigureImage);
+                            }
                             embed.WithImageUrl($"attachment://{fileName}");
-                            await _channel.SendFileAsync($"{fileName}", "", false, embed.Build());                
+                            await _channel.SendFileAsync($"{fileName}", "", false, embed.Build());
                             File.Delete(fileName);
-                         }
+                        }
                     }
                     else
                     {
                         await _channel.SendMessageAsync(null, false, embed.Build());
-                    }                    
+                    }
                 }
                 else if (_user != null)
                 {
                     if (hasFigure)
                     {
-                        var figure = _db.Figure.Include(t => t.Test).Where(f => f.FigureName == CurrentQuestion.FigureName).FirstOrDefault();
+                        using var db = _contextFactory.CreateDbContext();
+                        var figure = db.Figure.Include(t => t.Test).Where(f => f.FigureName == CurrentQuestion.FigureName).FirstOrDefault();
                         if (figure != null)
-                        {                     
+                        {
                             var fileName = $"{figure.Test.TestName}_{figure.FigureName}.png";
                             if (!File.Exists(fileName))
-                            {   
-                                await File.WriteAllBytesAsync(fileName, figure.FigureImage);         
-                            }             
+                            {
+                                await File.WriteAllBytesAsync(fileName, figure.FigureImage);
+                            }
                             embed.WithImageUrl($"attachment://{fileName}");
-                            _messages.Add(await _user.SendFileAsync($"{fileName}", "", false, embed.Build()));                                
+                            _messages.Add(await _user.SendFileAsync($"{fileName}", "", false, embed.Build()));
                             File.Delete(fileName);
-                         }
+                        }
                     }
                     else
                     {
                         await _user.SendMessageAsync(null, false, embed.Build());
-                    }                    
-                } 
+                    }
+                }
             });
             return Task.CompletedTask;
         }
 
-        private Task SendQuestionWithReactions(EmbedBuilder embed, bool hasFigure)
+        /// <summary>
+        /// Send a question with button components instead of reactions
+        /// </summary>
+        private Task SendQuestionWithButtons(EmbedBuilder embed, bool hasFigure)
         {
-            var _ = Task.Run(async () => 
+            var _ = Task.Run(async () =>
             {
-                var emojiList = new List<Emoji>();
-                foreach (var emoji in _emojiList)
-                {
-                    emojiList.Add(emoji.Item1);
-                }
+                var buttons = BuildAnswerButtons();
+
                 if (_channel != null)
                 {
+                    // Public mode - send to channel
                     if (hasFigure)
                     {
-                        var figure = _db.Figure.Include(t => t.Test).Where(f => f.FigureName == CurrentQuestion.FigureName).FirstOrDefault();
+                        using var db = _contextFactory.CreateDbContext();
+                        var figure = db.Figure.Include(t => t.Test).Where(f => f.FigureName == CurrentQuestion.FigureName).FirstOrDefault();
                         if (figure != null)
-                        {                     
+                        {
                             var fileName = $"{figure.Test.TestName}_{figure.FigureName}.png";
                             if (!File.Exists(fileName))
-                            {   
-                                await File.WriteAllBytesAsync(fileName, figure.FigureImage);         
-                            }                              
-                            embed.WithImageUrl($"attachment://{fileName}");
-                            var message = await _channel.SendFileAsync($"{fileName}", "", false, embed.Build());                            
-                            CurMessage = message;
-                            await message.AddReactionsAsync(emojiList.Take(4).ToArray());
-                            if (_skipUsers.Count > 0)
                             {
-                                await message.AddReactionAsync(emojiList.Last());
+                                await File.WriteAllBytesAsync(fileName, figure.FigureImage);
                             }
-                            _messages.Add(message);                
-                            File.Delete(fileName);                            
-                         }
+                            embed.WithImageUrl($"attachment://{fileName}");
+                            var message = await _channel.SendFileAsync(fileName, "", false, embed.Build(), components: buttons);
+                            CurMessage = message;
+                            SetCurrentButtonMessage(message);
+                            _messages.Add(message);
+                            File.Delete(fileName);
+                        }
                     }
                     else
                     {
-                        var message = await _channel.SendMessageAsync(null, false, embed.Build());
+                        var message = await _channel.SendMessageAsync(null, false, embed.Build(), components: buttons);
                         CurMessage = message;
-                        await message.AddReactionsAsync(emojiList.Take(4).ToArray());
-                        if (_skipUsers.Count > 0)
-                        {
-                            await message.AddReactionAsync(emojiList.Last());
-                        }
+                        SetCurrentButtonMessage(message);
                         _messages.Add(message);
-                        
-                    }                    
+                    }
                 }
                 else if (_user != null)
                 {
+                    // Private mode - send to user DM
                     if (hasFigure)
                     {
-                        var figure = _db.Figure.Include(t => t.Test).Where(f => f.FigureName == CurrentQuestion.FigureName).FirstOrDefault();
+                        using var db = _contextFactory.CreateDbContext();
+                        var figure = db.Figure.Include(t => t.Test).Where(f => f.FigureName == CurrentQuestion.FigureName).FirstOrDefault();
                         if (figure != null)
-                        {                     
+                        {
                             var fileName = $"{figure.Test.TestName}_{figure.FigureName}.png";
                             if (!File.Exists(fileName))
-                            {   
-                                await File.WriteAllBytesAsync(fileName, figure.FigureImage);         
-                            }             
-                            embed.WithImageUrl($"attachment://{fileName}");
-                            var message = await _user.SendFileAsync($"{fileName}", "", false, embed.Build());                            
-                            CurMessage = message;
-                            File.Delete(fileName); 
-                            await message.AddReactionsAsync(emojiList.Take(4).ToArray());      
-                            if (_skipUsers.Count > 0)
                             {
-                                await message.AddReactionAsync(emojiList.Last());
-                            }                                                                             
-                            //_messages.Add(message);                                
-                         }
+                                await File.WriteAllBytesAsync(fileName, figure.FigureImage);
+                            }
+                            embed.WithImageUrl($"attachment://{fileName}");
+                            var message = await _user.SendFileAsync(fileName, "", false, embed.Build(), components: buttons);
+                            CurMessage = message;
+                            SetCurrentButtonMessage(message);
+                            File.Delete(fileName);
+                        }
                     }
                     else
                     {
-                        var message = await _user.SendMessageAsync(null, false, embed.Build());                                             
+                        var message = await _user.SendMessageAsync(null, false, embed.Build(), components: buttons);
                         CurMessage = message;
-                        await message.AddReactionsAsync(emojiList.Take(4).ToArray());     
-                        if (_skipUsers.Count > 0)
-                        {
-                            await message.AddReactionAsync(emojiList.Last());
-                        }                                                                      
-                    }                    
-                }                                 
+                        SetCurrentButtonMessage(message);
+                    }
+                }
             });
             return Task.CompletedTask;
         }
 
         private async Task<List<Tuple<ulong, int>>> GetTopUsers()
         {
-            var users = await _db.UserAnswer.Where(u => u.Quiz.QuizId == Quiz.QuizId).ToListAsync();            
+            using var db = _contextFactory.CreateDbContext();
+            var users = await db.UserAnswer.Where(u => u.Quiz.QuizId == Quiz.QuizId).ToListAsync();
             users = users.Where(u => u.IsAnswer).ToList();
-            var userResults = new List<Tuple<ulong, int>>();            
+            var userResults = new List<Tuple<ulong, int>>();
             foreach (var user in users.Select(u => u.UserId).Distinct())
             {
-                var userId     = user;
-                var numCorrect = users.Where(u => (long)u.UserId == user && u.IsAnswer).ToList().Count;           
-                userResults.Add(Tuple.Create((ulong)user, numCorrect));                            
-            }            
+                var userId = user;
+                var numCorrect = users.Where(u => (long)u.UserId == user && u.IsAnswer).ToList().Count;
+                userResults.Add(Tuple.Create((ulong)user, numCorrect));
+            }
             return userResults.OrderByDescending(o => o.Item2).ToList();
         }
 
         private async Task<List<UserAnswer>> GetCorrectUsersFromQuestion()
         {
-            var users = await _db.UserAnswer.Where(u => u.Quiz.QuizId == Quiz.QuizId && u.Question.QuestionId == CurrentQuestion.QuestionId).ToListAsync();            
-            users = users.Where(u => u.IsAnswer).ToList();            
+            using var db = _contextFactory.CreateDbContext();
+            var users = await db.UserAnswer.Where(u => u.Quiz.QuizId == Quiz.QuizId && u.Question.QuestionId == CurrentQuestion.QuestionId).ToListAsync();
+            users = users.Where(u => u.IsAnswer).ToList();
             return users;
-        }        
+        }
 
         private async Task<List<UserAnswer>> GetIncorrectUsersFromQuestion()
         {
-            var users = await _db.UserAnswer.Where(u => u.Quiz.QuizId == Quiz.QuizId && u.Question.QuestionId == CurrentQuestion.QuestionId).ToListAsync();            
-            users = users.Where(u => !u.IsAnswer).ToList();            
+            using var db = _contextFactory.CreateDbContext();
+            var users = await db.UserAnswer.Where(u => u.Quiz.QuizId == Quiz.QuizId && u.Question.QuestionId == CurrentQuestion.QuestionId).ToListAsync();
+            users = users.Where(u => !u.IsAnswer).ToList();
             return users;
         } 
 
         internal async Task StopQuiz()
-        {          
-            //wrap quiz up here           
+        {
             QuizUtil trivia = null;
             _hamTestService.RunningTests.TryRemove(Id, out trivia);
-            ShouldStopTest = true;              
-            //_client.MessageReceived -= ListenForAnswer;    
-            _client.ReactionAdded += ListenForReactionAdded;                             
-            var quiz = _db.Quiz.Where(q => q.QuizId == Quiz.QuizId).FirstOrDefault();  
-            quiz.TimeEnded = DateTime.Now;
-            quiz.IsActive = false;
-            await _db.SaveChangesAsync();   
+            ShouldStopTest = true;
+
+            using var db = _contextFactory.CreateDbContext();
+            var quiz = db.Quiz.Where(q => q.QuizId == Quiz.QuizId).FirstOrDefault();
+            if (quiz != null)
+            {
+                quiz.TimeEnded = DateTime.UtcNow;
+                quiz.IsActive = false;
+                await db.SaveChangesAsync();
+            }
+
             var embed = new EmbedBuilder();
             embed.Title = $"[{CurrentQuestion.Test.TestName}] [{CurrentQuestion.Test.FromDate.ToShortDateString()} -> {CurrentQuestion.Test.ToDate.ToShortDateString()}] Test Results!";
             embed.WithColor(new Color(0, 255, 0));
             var sb = new StringBuilder();
             sb.AppendLine($"Number of questions -> [**{_totalQuestions}**]");
             embed.ThumbnailUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true";
-            embed.WithFooter(new EmbedFooterBuilder{
+            embed.WithFooter(new EmbedFooterBuilder
+            {
                 Text = "SevenThree, your local ham radio Discord bot!",
                 IconUrl = "https://github.com/gngrninja/SevenThree/raw/master/media/73.png?raw=true"
             });
-            var users = await _db.UserAnswer.Where(u => u.Quiz.QuizId == Quiz.QuizId).ToListAsync();
+            var users = await db.UserAnswer.Where(u => u.Quiz.QuizId == Quiz.QuizId).ToListAsync();
             if (users != null)
             {                                
                 sb.AppendLine();
@@ -892,18 +1007,19 @@ namespace SevenThree.Modules
             await ClearChannel();
         }
 
-        private async Task<List<Questions>> GetRandomQuestions(int numQuestions, string testName, bool figuresOnly = false)        
-        {       
-            List<Questions> questions = null;     
+        private async Task<List<Questions>> GetRandomQuestions(int numQuestions, string testName, bool figuresOnly = false)
+        {
+            using var db = _contextFactory.CreateDbContext();
+            List<Questions> questions;
             if (!figuresOnly)
             {
-                questions = await _db.Questions.Include(q => q.Test).Where(q => q.Test.TestName == testName).ToListAsync();
+                questions = await db.Questions.Include(q => q.Test).Where(q => q.Test.TestName == testName).ToListAsync();
             }
             else
             {
-                questions = await _db.Questions.Include(q => q.Test).Where(q => q.Test.TestName == testName && q.FigureName != null).ToListAsync();
+                questions = await db.Questions.Include(q => q.Test).Where(q => q.Test.TestName == testName && q.FigureName != null).ToListAsync();
             }
-            
+
             var random = new Random();
             var testQuestions = new List<Questions>();
             if (numQuestions > 100)
@@ -924,10 +1040,11 @@ namespace SevenThree.Modules
         }          
 
         private async Task ClearChannel()
-        {            
+        {
             if (_guild != null)
             {
-                var settings = await _db.QuizSettings.Where(s => s.DiscordGuildId == _guild.Id).FirstOrDefaultAsync();
+                using var db = _contextFactory.CreateDbContext();
+                var settings = await db.QuizSettings.Where(s => s.DiscordGuildId == _guild.Id).FirstOrDefaultAsync();
                 if (settings != null && settings.ClearAfterTaken)
                 {
                     if (_messages.Count > 100)

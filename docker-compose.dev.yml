@@ -1,0 +1,36 @@
+services:
+  seventhree-dev:
+    build: .
+    container_name: seventhree-bot-dev
+    env_file:
+      - .env.development.docker
+    environment:
+      - DOTNET_ENVIRONMENT=docker
+    depends_on:
+      postgres-dev:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+      - ./src/SevenThree/import:/app/import
+
+  postgres-dev:
+    image: postgres:16-alpine
+    container_name: seventhree-postgres-dev
+    environment:
+      POSTGRES_USER: seventhree
+      POSTGRES_PASSWORD: seventhree_dev
+      POSTGRES_DB: seventhree
+    # Port exposed for local development mode (--local flag)
+    # In full Docker mode, bot connects via internal network
+    ports:
+      - "5473:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U seventhree"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_dev_data:

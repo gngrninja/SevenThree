@@ -1,0 +1,33 @@
+services:
+  bot:
+    build: .
+    container_name: seventhree-bot
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      - DOTNET_ENVIRONMENT=production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: seventhree-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: seventhree
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-seventhree}
+      POSTGRES_DB: seventhree
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U seventhree"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
