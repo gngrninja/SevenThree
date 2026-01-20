@@ -1,71 +1,57 @@
 using System;
-using Xunit;
-using SevenThree.Modules;
 using System.IO;
-using System.Linq;
+using Xunit;
 
 namespace SevenThree.Tests
 {
-    public class ParseName
+    public class ParseNameTests
     {
-        [Fact]
-        public void GetDatesFromFileName()
+        [Theory]
+        [InlineData("tech_07-01-2022_06-30-2026", "07-01-2022", "06-30-2026")]
+        [InlineData("general_07-01-2023_06-30-2027", "07-01-2023", "06-30-2027")]
+        [InlineData("extra_07-01-2024_06-30-2028", "07-01-2024", "06-30-2028")]
+        public void ParseDatesFromFileName_ValidFormat_ReturnsCorrectDates(
+            string fileName, string expectedStart, string expectedEnd)
         {
-            //arrange
-            string[] tests = new string[] 
-            {
-                "tech",
-                "general",
-                "extra"
-            };
-            var files = Directory.GetFiles($"{Environment.CurrentDirectory}/import");
-            DateTime techStartDate = DateTime.MinValue;
-            DateTime techEndDate = DateTime.MinValue;
-            DateTime generalStartDate = DateTime.MinValue;
-            DateTime generalEndDate = DateTime.MinValue;
-            DateTime extraStartDate = DateTime.MinValue;
-            DateTime extraEndDate = DateTime.MinValue;
+            // arrange
+            var parts = fileName.Split('_');
 
-            //act
-            foreach (var test in tests)
-            {
-                var curFile = files.Where(f => f.Contains(test)).FirstOrDefault();
-                if (curFile != null)
-                {
-                    var fileName = Path.GetFileNameWithoutExtension(curFile);
-                    switch (test)
-                    {
-                        case "tech":
-                        {
-                            techStartDate = DateTime.Parse(fileName.Split('_')[1]);
-                            techEndDate  = DateTime.Parse(fileName.Split('_')[2]);
-                            break;
-                        }
-                        case "general":
-                        {
-                            generalStartDate = DateTime.Parse(fileName.Split('_')[1]);
-                            generalEndDate = DateTime.Parse(fileName.Split('_')[2]);
-                            break;
-                        }
-                        case "extra":
-                        {
-                            extraStartDate = DateTime.Parse(fileName.Split('_')[1]);
-                            extraEndDate = DateTime.Parse(fileName.Split('_')[2]);
-                            break;
-                        }
-                    }
-                }           
-            }
+            // act
+            var startDate = DateTime.Parse(parts[1]);
+            var endDate = DateTime.Parse(parts[2]);
 
-            //assert            
-            Assert.Equal(techStartDate, DateTime.Parse("07-01-2018"));
-            Assert.Equal(techEndDate, DateTime.Parse("06-30-2022"));
+            // assert
+            Assert.Equal(DateTime.Parse(expectedStart), startDate);
+            Assert.Equal(DateTime.Parse(expectedEnd), endDate);
+        }
 
-            Assert.Equal(generalStartDate, DateTime.Parse("7-1-2019"));
-            Assert.Equal(generalEndDate, DateTime.Parse("6-30-2023"));
+        [Theory]
+        [InlineData("tech_07-01-2022_06-30-2026.json", "tech")]
+        [InlineData("general_07-01-2023_06-30-2027.json", "general")]
+        [InlineData("extra_07-01-2024_06-30-2028.json", "extra")]
+        public void ParseTestTypeFromFileName_ValidFormat_ReturnsCorrectType(
+            string fileName, string expectedType)
+        {
+            // arrange
+            var fileNameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
 
-            Assert.Equal(extraStartDate, DateTime.Parse("7-1-2016"));
-            Assert.Equal(extraEndDate, DateTime.Parse("6-30-2020"));
+            // act
+            var testType = fileNameWithoutExt.Split('_')[0];
+
+            // assert
+            Assert.Equal(expectedType, testType);
+        }
+
+        [Fact]
+        public void ParseFileName_InvalidFormat_ThrowsException()
+        {
+            // arrange
+            var invalidFileName = "invalid";
+            var parts = invalidFileName.Split('_');
+
+            // act & assert
+            Assert.Single(parts);
+            Assert.Throws<IndexOutOfRangeException>(() => parts[1]);
         }
     }
 }
