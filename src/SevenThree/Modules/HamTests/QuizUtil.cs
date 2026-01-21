@@ -22,7 +22,6 @@ namespace SevenThree.Modules
         private readonly SemaphoreSlim _guessLock = new SemaphoreSlim(1, 1);
         private readonly IDbContextFactory<SevenThreeContext> _contextFactory;
         private readonly ILogger _logger;
-        private readonly DiscordSocketClient _client;
         private readonly IGuild _guild;
         private readonly ITextChannel _channel;
         private readonly HamTestService _hamTestService;
@@ -60,7 +59,6 @@ namespace SevenThree.Modules
             ulong id)
         {
             _logger = services.GetRequiredService<ILogger<QuizUtil>>();
-            _client = services.GetRequiredService<DiscordSocketClient>();
             _contextFactory = services.GetRequiredService<IDbContextFactory<SevenThreeContext>>();
             _hamTestService = services.GetRequiredService<HamTestService>();
 
@@ -81,7 +79,6 @@ namespace SevenThree.Modules
             ulong id)
         {
             _logger = services.GetRequiredService<ILogger<QuizUtil>>();
-            _client = services.GetRequiredService<DiscordSocketClient>();
             _contextFactory = services.GetRequiredService<IDbContextFactory<SevenThreeContext>>();
             _hamTestService = services.GetRequiredService<HamTestService>();
 
@@ -704,7 +701,7 @@ namespace SevenThree.Modules
             var users = await db.UserAnswer.Where(u => u.Quiz.QuizId == Quiz.QuizId).ToListAsync();
             var userResults = await GetTopUsers();
 
-            if (userResults.Count > 0)
+            if (userResults.Count > 0 && _totalQuestions > 0)
             {
                 sb.AppendLine();
                 sb.AppendLine("**__Leaderboard:__**");

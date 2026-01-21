@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging;
 using SevenThree.Database;
 using SevenThree.Modules;
 using SevenThree.Modules.BandConditions;
+using SevenThree.Modules.PskReporter;
 
 namespace SevenThree
 {
@@ -144,8 +145,10 @@ namespace SevenThree
                 .AddSingleton<QrzApi>()
                 .AddSingleton<HamTestService>()
                 .AddSingleton<QuizButtonHandler>()
+                .AddSingleton<PskButtonHandler>()
                 .AddSingleton<ReactionService>()
                 .AddSingleton<BandConditions>()
+                .AddSingleton<PskReporterService>()
                 .AddDbContextFactory<SevenThreeContext>(options =>
                 {
                     var connectionString = GetConnectionString();

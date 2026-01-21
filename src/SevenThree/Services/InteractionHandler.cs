@@ -4,10 +4,10 @@ using System.Threading.Tasks;
 using Discord;
 using Discord.Interactions;
 using Discord.WebSocket;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Serilog;
 using SevenThree.Constants;
+using SevenThree.Modules.PskReporter;
+using SevenThree.Services;
 
 namespace SevenThree.Services
 {
@@ -18,19 +18,22 @@ namespace SevenThree.Services
         private readonly IServiceProvider _services;
         private readonly ILogger<InteractionHandler> _logger;
         private readonly QuizButtonHandler _quizButtonHandler;
+        private readonly PskButtonHandler _pskButtonHandler;
 
         public InteractionHandler(
             DiscordSocketClient client,
             InteractionService interactions,
             IServiceProvider services,
             ILogger<InteractionHandler> logger,
-            QuizButtonHandler quizButtonHandler)
+            QuizButtonHandler quizButtonHandler,
+            PskButtonHandler pskButtonHandler)
         {
             _client = client;
             _interactions = interactions;
             _services = services;
             _logger = logger;
             _quizButtonHandler = quizButtonHandler;
+            _pskButtonHandler = pskButtonHandler;
         }
 
         public async Task InitializeAsync()
@@ -55,11 +58,11 @@ namespace SevenThree.Services
             try
             {
                 await _interactions.RegisterCommandsGloballyAsync();
-                Log.Information("Slash commands registered globally");
+                _logger.LogInformation("Slash commands registered globally");
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed to register slash commands");
+                _logger.LogError(ex, "Failed to register slash commands");
             }
         }
 
@@ -78,7 +81,7 @@ namespace SevenThree.Services
 
                 if (!result.IsSuccess)
                 {
-                    Log.Error($"Interaction failed: {result.Error} - {result.ErrorReason}");
+                    _logger.LogError("Interaction failed: {Error} - {ErrorReason}", result.Error, result.ErrorReason);
 
                     // Respond with error if not already responded
                     if (!interaction.HasResponded)
@@ -89,7 +92,7 @@ namespace SevenThree.Services
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Exception handling interaction");
+                _logger.LogError(ex, "Exception handling interaction");
 
                 if (interaction.Type == InteractionType.ApplicationCommand)
                 {
@@ -105,11 +108,13 @@ namespace SevenThree.Services
         {
             if (!result.IsSuccess)
             {
-                Log.Warning($"Slash command {command.Name} failed: {result.Error} - {result.ErrorReason}");
+                _logger.LogWarning("Slash command {CommandName} failed: {Error} - {ErrorReason}",
+                    command.Name, result.Error, result.ErrorReason);
             }
             else
             {
-                Log.Information($"Slash command {command.Name} executed by {context.User.Username}");
+                _logger.LogInformation("Slash command {CommandName} executed by {Username}",
+                    command.Name, context.User.Username);
             }
 
             return Task.CompletedTask;
@@ -133,6 +138,13 @@ namespace SevenThree.Services
                     return;
                 }
 
+                // Route PSK pagination button clicks to PskButtonHandler
+                if (component.Data.CustomId.StartsWith($"{PskReporterService.BUTTON_PREFIX}:"))
+                {
+                    await _pskButtonHandler.HandlePskButtonAsync(component);
+                    return;
+                }
+
                 // Unknown button - acknowledge but do nothing
                 if (!component.HasResponded)
                 {
@@ -141,7 +153,7 @@ namespace SevenThree.Services
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Exception handling button interaction");
+                _logger.LogError(ex, "Exception handling button interaction");
                 if (!component.HasResponded)
                 {
                     await component.RespondAsync("An error occurred processing your response.", ephemeral: true);
