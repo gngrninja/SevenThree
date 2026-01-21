@@ -75,6 +75,10 @@ namespace SevenThree
                         return;
                     }
 
+                    // Initialize HamTestService (cleanup stale quizzes)
+                    var hamTestService = services.GetRequiredService<HamTestService>();
+                    await hamTestService.InitializeAsync();
+
                     // Initialize interaction handler
                     var interactionHandler = services.GetRequiredService<InteractionHandler>();
                     await interactionHandler.InitializeAsync();

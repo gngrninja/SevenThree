@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
+using SevenThree.Constants;
 using SevenThree.Database;
 using SevenThree.Models;
 using SevenThree.Services;
@@ -138,40 +139,54 @@ namespace SevenThree.Modules
                 DateTime startDate = DateTime.SpecifyKind(DateTime.Parse(fileName.Split('_')[1]), DateTimeKind.Utc);
                 DateTime endDate = DateTime.SpecifyKind(DateTime.Parse(fileName.Split('_')[2]), DateTimeKind.Utc);
 
-                var test = db.HamTest.Where(t => t.TestName == testName).FirstOrDefault();
+                var test = await db.HamTest.Where(t => t.TestName == testName).FirstOrDefaultAsync();
                 if (test == null)
                 {
-                    await db.AddAsync(new HamTest
+                    test = new HamTest
                     {
                         TestName = testName,
                         TestDescription = testDesc,
                         FromDate = startDate,
                         ToDate = endDate
-                    });
+                    };
+                    await db.AddAsync(test);
                     await db.SaveChangesAsync();
                 }
                 else
                 {
-                    // Clear old test items
-                    var figures = db.Figure.Where(f => f.Test.TestName == testName).ToList();
-                    db.RemoveRange(figures);
+                    // Clear old test items (order matters for FK constraints)
+                    // 1. UserAnswer references Questions
+                    var userAnswers = await db.UserAnswer
+                        .Where(ua => ua.Question.Test.TestName == testName)
+                        .ToListAsync();
+                    db.RemoveRange(userAnswers);
 
-                    var answers = db.Answer.Where(a => a.Question.Test.TestName == testName).ToList();
+                    // 2. Answer references Questions
+                    var answers = await db.Answer
+                        .Where(a => a.Question.Test.TestName == testName)
+                        .ToListAsync();
                     db.RemoveRange(answers);
 
-                    var questions = db.Questions.Where(q => q.Test.TestName == testName).ToList();
+                    // 3. Questions references HamTest
+                    var questions = await db.Questions
+                        .Where(q => q.Test.TestName == testName)
+                        .ToListAsync();
                     db.RemoveRange(questions);
 
-                    await db.SaveChangesAsync();
+                    // 4. Figure references HamTest
+                    var figures = await db.Figure
+                        .Where(f => f.Test.TestName == testName)
+                        .ToListAsync();
+                    db.RemoveRange(figures);
 
                     test.FromDate = startDate;
                     test.ToDate = endDate;
                     await db.SaveChangesAsync();
                 }
 
-                test = db.HamTest.Where(t => t.TestName == testName).FirstOrDefault();
-                var questionData = QuestionIngest.FromJson(File.ReadAllText(curFile));
+                var questionData = QuestionIngest.FromJson(await File.ReadAllTextAsync(curFile));
 
+                // Batch insert questions with their answers
                 foreach (var item in questionData)
                 {
                     var newQuestion = new Questions
@@ -184,47 +199,45 @@ namespace SevenThree.Modules
                         SubelementName = item.SubelementName?.ToString(),
                         Test = test
                     };
+                    db.Questions.Add(newQuestion);
 
-                    await db.AddAsync(newQuestion);
-                    await db.SaveChangesAsync();
-
-                    var curQuestion = db.Questions.Where(q => q.QuestionSection == item.QuestionId).FirstOrDefault();
-                    var answerChar = char.Parse(item.AnswerKey.ToString());
-
+                    var answerChar = item.AnswerKey.ToString()[0];
                     foreach (var answer in item.PossibleAnswer)
                     {
-                        var posAnswerText = answer.Substring(3);
-                        var posAnswerChar = answer.Substring(0, 1);
-                        bool isAnswer = answerChar == char.Parse(posAnswerChar);
+                        var posAnswerChar = answer[0];
+                        var posAnswerText = answer.Length > 3 ? answer.Substring(3) : answer;
 
-                        await db.AddAsync(new Answer
+                        db.Answer.Add(new Answer
                         {
-                            Question = curQuestion,
+                            Question = newQuestion,
                             AnswerText = posAnswerText,
-                            IsAnswer = isAnswer
+                            IsAnswer = answerChar == posAnswerChar
                         });
                     }
-                    await db.SaveChangesAsync();
                 }
 
-                // Import figures
-                var files = Directory.EnumerateFiles($"import/{testName}", $"{testName}_*.png");
-                foreach (var file in files)
+                // Single save for all questions and answers
+                await db.SaveChangesAsync();
+
+                // Batch import figures
+                var figureFiles = Directory.EnumerateFiles($"import/{testName}", $"{testName}_*.png");
+                foreach (var file in figureFiles)
                 {
-                    if (File.Exists(file))
+                    var contents = await File.ReadAllBytesAsync(file);
+                    var figureName = Path.GetFileNameWithoutExtension(file)
+                        .Replace($"{testName}_", "")
+                        .Trim();
+
+                    db.Figure.Add(new Figure
                     {
-                        var contents = File.ReadAllBytes(file);
-                        await db.AddAsync(new Figure
-                        {
-                            Test = test,
-                            FigureName = file.Split('_')[1].Replace(".png", "").Trim(),
-                            FigureImage = contents
-                        });
-                        await db.SaveChangesAsync();
-                    }
+                        Test = test,
+                        FigureName = figureName,
+                        FigureImage = contents
+                    });
                 }
 
-                await FollowupAsync($"Imported {testName} into the database!");
+                await db.SaveChangesAsync();
+                await FollowupAsync($"Imported {testName} ({questionData.Count} questions) into the database!");
             }
             catch (Exception ex)
             {
@@ -239,9 +252,9 @@ namespace SevenThree.Modules
             var testName = license.ToString().ToLower();
             var isPrivate = mode == QuizMode.Private;
 
-            // Validate delay (15-120 seconds)
+            // Validate delay using constants
             var originalDelay = questionDelay;
-            questionDelay = Math.Clamp(questionDelay, 15, 120);
+            questionDelay = Math.Clamp(questionDelay, QuizConstants.MIN_DELAY_SECONDS, QuizConstants.MAX_DELAY_SECONDS);
             var delayWasClamped = originalDelay != questionDelay;
 
             // Check channel restrictions (only for public mode)

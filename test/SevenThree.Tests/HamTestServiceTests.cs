@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
 using SevenThree.Database;
@@ -15,6 +16,7 @@ namespace SevenThree.Tests
     public class HamTestServiceTests : IDisposable
     {
         private readonly DbContextOptions<SevenThreeContext> _dbOptions;
+        private readonly Mock<ILogger<HamTestService>> _mockLogger;
 
         public HamTestServiceTests()
         {
@@ -22,6 +24,7 @@ namespace SevenThree.Tests
             _dbOptions = new DbContextOptionsBuilder<SevenThreeContext>()
                 .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
                 .Options;
+            _mockLogger = new Mock<ILogger<HamTestService>>();
         }
 
         public void Dispose()
@@ -39,16 +42,18 @@ namespace SevenThree.Tests
             return mockFactory.Object;
         }
 
+        private HamTestService CreateService(IDbContextFactory<SevenThreeContext> factory = null)
+        {
+            return new HamTestService(factory ?? CreateMockFactory(), _mockLogger.Object);
+        }
+
         #region Constructor Tests
 
         [Fact]
         public void Constructor_InitializesRunningTestsDictionary()
         {
-            // arrange
-            var factory = CreateMockFactory();
-
-            // act
-            var service = new HamTestService(factory);
+            // arrange & act
+            var service = CreateService();
 
             // assert
             Assert.NotNull(service.RunningTests);
@@ -56,7 +61,7 @@ namespace SevenThree.Tests
         }
 
         [Fact]
-        public async Task Constructor_CleansUpActiveQuizzes()
+        public async Task InitializeAsync_CleansUpActiveQuizzes()
         {
             // arrange
             var factory = CreateMockFactory();
@@ -78,10 +83,8 @@ namespace SevenThree.Tests
             }
 
             // act
-            var service = new HamTestService(factory);
-
-            // Allow cleanup task to complete
-            await Task.Delay(100);
+            var service = CreateService(factory);
+            await service.InitializeAsync();
 
             // assert
             using (var context = new SevenThreeContext(_dbOptions))
@@ -100,8 +103,7 @@ namespace SevenThree.Tests
         public void RunningTests_GetValueForNonexistentKey_ReturnsFalse()
         {
             // arrange
-            var factory = CreateMockFactory();
-            var service = new HamTestService(factory);
+            var service = CreateService();
 
             // act
             var found = service.RunningTests.TryGetValue(999999UL, out var result);
@@ -115,8 +117,7 @@ namespace SevenThree.Tests
         public void RunningTests_IsConcurrentDictionary()
         {
             // arrange
-            var factory = CreateMockFactory();
-            var service = new HamTestService(factory);
+            var service = CreateService();
 
             // assert
             Assert.IsType<System.Collections.Concurrent.ConcurrentDictionary<ulong, QuizUtil>>(service.RunningTests);
@@ -125,11 +126,8 @@ namespace SevenThree.Tests
         [Fact]
         public void RunningTests_IsEmptyOnConstruction()
         {
-            // arrange
-            var factory = CreateMockFactory();
-
-            // act
-            var service = new HamTestService(factory);
+            // arrange & act
+            var service = CreateService();
 
             // assert
             Assert.Empty(service.RunningTests);
@@ -143,11 +141,25 @@ namespace SevenThree.Tests
         public async Task StopTests_EmptyDictionary_CompletesSuccessfully()
         {
             // arrange
-            var factory = CreateMockFactory();
-            var service = new HamTestService(factory);
+            var service = CreateService();
 
             // act & assert (should not throw)
             await service.StopTests();
+        }
+
+        #endregion
+
+        #region InitializeAsync Tests
+
+        [Fact]
+        public async Task InitializeAsync_CanBeCalledMultipleTimes()
+        {
+            // arrange
+            var service = CreateService();
+
+            // act & assert - should not throw on multiple calls
+            await service.InitializeAsync();
+            await service.InitializeAsync();
         }
 
         #endregion

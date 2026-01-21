@@ -17,20 +17,20 @@ namespace SevenThree.Tests
 {
     public class QuizButtonHandlerTests
     {
-        private readonly Mock<HamTestService> _mockHamTestService;
+        private readonly HamTestService _hamTestService;
         private readonly Mock<ILogger<QuizButtonHandler>> _mockLogger;
         private readonly QuizButtonHandler _sut;
 
         public QuizButtonHandlerTests()
         {
-            // Create mock factory for HamTestService
+            // Create mock factory and logger for HamTestService
             var mockFactory = new Mock<IDbContextFactory<SevenThreeContext>>();
-            _mockHamTestService = new Mock<HamTestService>(mockFactory.Object);
-            _mockHamTestService.Object.RunningTests = new ConcurrentDictionary<ulong, QuizUtil>();
+            var mockHamTestLogger = new Mock<ILogger<HamTestService>>();
+            _hamTestService = new HamTestService(mockFactory.Object, mockHamTestLogger.Object);
 
             _mockLogger = new Mock<ILogger<QuizButtonHandler>>();
 
-            _sut = new QuizButtonHandler(_mockHamTestService.Object, _mockLogger.Object);
+            _sut = new QuizButtonHandler(_hamTestService, _mockLogger.Object);
         }
 
         #region Button ID Parsing Tests
@@ -163,7 +163,7 @@ namespace SevenThree.Tests
             var sessionId = 999999UL;
 
             // act
-            var found = _mockHamTestService.Object.RunningTests.TryGetValue(sessionId, out var quizUtil);
+            var found = _hamTestService.RunningTests.TryGetValue(sessionId, out var quizUtil);
 
             // assert
             Assert.False(found);
@@ -177,7 +177,7 @@ namespace SevenThree.Tests
             var sessionId = 123456789UL;
 
             // assert - dictionary starts empty
-            Assert.False(_mockHamTestService.Object.RunningTests.ContainsKey(sessionId));
+            Assert.False(_hamTestService.RunningTests.ContainsKey(sessionId));
         }
 
         #endregion
