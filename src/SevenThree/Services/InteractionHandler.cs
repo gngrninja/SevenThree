@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Discord;
 using Discord.Interactions;
 using Discord.WebSocket;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using SevenThree.Constants;
 using SevenThree.Modules.PskReporter;
@@ -17,6 +18,7 @@ namespace SevenThree.Services
         private readonly InteractionService _interactions;
         private readonly IServiceProvider _services;
         private readonly ILogger<InteractionHandler> _logger;
+        private readonly IConfiguration _config;
         private readonly QuizButtonHandler _quizButtonHandler;
         private readonly PskButtonHandler _pskButtonHandler;
 
@@ -25,6 +27,7 @@ namespace SevenThree.Services
             InteractionService interactions,
             IServiceProvider services,
             ILogger<InteractionHandler> logger,
+            IConfiguration config,
             QuizButtonHandler quizButtonHandler,
             PskButtonHandler pskButtonHandler)
         {
@@ -32,6 +35,7 @@ namespace SevenThree.Services
             _interactions = interactions;
             _services = services;
             _logger = logger;
+            _config = config;
             _quizButtonHandler = quizButtonHandler;
             _pskButtonHandler = pskButtonHandler;
         }
@@ -53,12 +57,22 @@ namespace SevenThree.Services
 
         public async Task RegisterCommandsAsync()
         {
-            // Register commands globally (takes up to 1 hour to propagate)
-            // For development, you can register to a specific guild for instant updates
             try
             {
-                await _interactions.RegisterCommandsGloballyAsync();
-                _logger.LogInformation("Slash commands registered globally");
+                // Check for dev guild ID - if set, register to that guild (instant)
+                // Otherwise register globally (takes up to 1 hour to propagate)
+                var devGuildIdStr = _config["DevGuildId"] ?? Environment.GetEnvironmentVariable("SEVENTHREE_DevGuildId");
+
+                if (!string.IsNullOrEmpty(devGuildIdStr) && ulong.TryParse(devGuildIdStr, out var devGuildId))
+                {
+                    await _interactions.RegisterCommandsToGuildAsync(devGuildId);
+                    _logger.LogInformation("Slash commands registered to dev guild {GuildId} (instant)", devGuildId);
+                }
+                else
+                {
+                    await _interactions.RegisterCommandsGloballyAsync();
+                    _logger.LogInformation("Slash commands registered globally (may take up to 1 hour to propagate)");
+                }
             }
             catch (Exception ex)
             {

@@ -1,7 +1,19 @@
+using Discord;
+
 namespace SevenThree.Constants
 {
     public static class QuizConstants
     {
+        // Embed colors for quiz results
+        public static readonly Color COLOR_CORRECT = new(0, 255, 0);
+        public static readonly Color COLOR_INCORRECT = new(255, 0, 0);
+        public static readonly Color COLOR_MIXED = new(100, 155, 0);
+
+        // Embed colors for license types
+        public static readonly Color COLOR_TECH = new(0, 128, 255);
+        public static readonly Color COLOR_GENERAL = new(102, 102, 255);
+        public static readonly Color COLOR_EXTRA = new(255, 102, 255);
+
         /// <summary>
         /// Prefix for quiz answer button custom IDs.
         /// Format: {BUTTON_PREFIX}:{sessionId}:{answer}

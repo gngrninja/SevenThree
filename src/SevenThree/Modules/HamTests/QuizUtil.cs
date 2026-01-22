@@ -92,11 +92,11 @@ namespace SevenThree.Modules
             _quizHelper = new QuizHelper();
         }      
 
-        public async Task StartGame(Quiz quiz, int numQuestions, string testName, int questionDelay)
+        public async Task StartGame(Quiz quiz, int numQuestions, int testId, int questionDelay)
         {
             _questionDelay = questionDelay;
             Quiz = quiz;
-            _questions = await GetRandomQuestions(numQuestions, testName, figuresOnly: false);
+            _questions = await GetRandomQuestions(numQuestions, testId, figuresOnly: false);
             _totalQuestions = _questions.Count;
 
             while (!ShouldStopTest)
@@ -183,16 +183,16 @@ namespace SevenThree.Modules
                 {
                     sb.AppendLine($"**{user.UserName}**");
                 }
-                embed.WithColor(new Color(0, 255, 0));
+                embed.WithColor(QuizConstants.COLOR_CORRECT);
             }
             else if (usersWon.Count == 0 && usersLost.Count == 0)
             {
-                embed.WithColor(new Color(255, 0, 0));
+                embed.WithColor(QuizConstants.COLOR_INCORRECT);
                 sb.AppendLine("**__Nobody answered the question =(__**");
             }
             else if (usersLost.Count > 0 && usersWon.Count == 0)
             {
-                embed.WithColor(new Color(255, 0, 0));
+                embed.WithColor(QuizConstants.COLOR_INCORRECT);
                 sb.AppendLine("**__Answered Incorrectly:__**");
                 foreach (var user in usersLost)
                 {
@@ -201,7 +201,7 @@ namespace SevenThree.Modules
             }
             else
             {
-                embed.WithColor(new Color(100, 155, 0));
+                embed.WithColor(QuizConstants.COLOR_MIXED);
                 sb.AppendLine("**__Answered Correctly:__**");
                 foreach (var user in usersWon)
                 {
@@ -298,10 +298,10 @@ namespace SevenThree.Modules
 
             var color = CurrentQuestion.Test.TestName switch
             {
-                "tech" => new Color(0, 128, 255),
-                "general" => new Color(102, 102, 255),
-                "extra" => new Color(255, 102, 255),
-                _ => new Color(0, 255, 0)
+                "tech" => QuizConstants.COLOR_TECH,
+                "general" => QuizConstants.COLOR_GENERAL,
+                "extra" => QuizConstants.COLOR_EXTRA,
+                _ => QuizConstants.COLOR_CORRECT
             };
             embed.WithColor(color);
 
@@ -500,13 +500,13 @@ namespace SevenThree.Modules
 
             if (isCorrect)
             {
-                embed.WithColor(new Color(0, 255, 0));
+                embed.WithColor(QuizConstants.COLOR_CORRECT);
                 embed.Title = "Correct!";
                 embed.Description = $"**{selectedAnswer}**. {selectedAnswerData.AnswerText ?? "Answer text not available"}";
             }
             else
             {
-                embed.WithColor(new Color(255, 0, 0));
+                embed.WithColor(QuizConstants.COLOR_INCORRECT);
                 embed.Title = "Incorrect";
                 embed.Description = $"You answered: **{selectedAnswer}**\n\n" +
                     $"Correct answer: **{correctAnswer?.Item1}**. {correctAnswer?.Item2.AnswerText ?? "Answer text not available"}";
@@ -555,8 +555,9 @@ namespace SevenThree.Modules
             byte[] figureData,
             MessageComponent components = null)
         {
-            // Write temp file, send, then delete
-            var tempPath = Path.Combine(Path.GetTempPath(), fileName);
+            // Write temp file with unique identifier to prevent collisions
+            var uniqueFileName = $"{Guid.NewGuid():N}_{fileName}";
+            var tempPath = Path.Combine(Path.GetTempPath(), uniqueFileName);
             try
             {
                 await File.WriteAllBytesAsync(tempPath, figureData);
@@ -639,16 +640,13 @@ namespace SevenThree.Modules
         private async Task<List<Tuple<ulong, int>>> GetTopUsers()
         {
             using var db = _contextFactory.CreateDbContext();
-            var users = await db.UserAnswer.Where(u => u.Quiz.QuizId == Quiz.QuizId).ToListAsync();
-            users = users.Where(u => u.IsAnswer).ToList();
-            var userResults = new List<Tuple<ulong, int>>();
-            foreach (var user in users.Select(u => u.UserId).Distinct())
-            {
-                var userId = user;
-                var numCorrect = users.Where(u => (long)u.UserId == user && u.IsAnswer).ToList().Count;
-                userResults.Add(Tuple.Create((ulong)user, numCorrect));
-            }
-            return userResults.OrderByDescending(o => o.Item2).ToList();
+            var userResults = await db.UserAnswer
+                .Where(u => u.Quiz.QuizId == Quiz.QuizId && u.IsAnswer)
+                .GroupBy(u => u.UserId)
+                .Select(g => Tuple.Create((ulong)g.Key, g.Count()))
+                .OrderByDescending(t => t.Item2)
+                .ToListAsync();
+            return userResults;
         }
 
         private async Task<List<UserAnswer>> GetCorrectUsersFromQuestion()
@@ -687,7 +685,7 @@ namespace SevenThree.Modules
             var toDate = CurrentQuestion?.Test?.ToDate.ToShortDateString() ?? "?";
 
             embed.Title = $"[{testName}] [{fromDate} -> {toDate}] Test Results!";
-            embed.WithColor(new Color(0, 255, 0));
+            embed.WithColor(QuizConstants.COLOR_CORRECT);
             embed.ThumbnailUrl = QuizConstants.BOT_THUMBNAIL_URL;
             embed.WithFooter(new EmbedFooterBuilder
             {
@@ -730,11 +728,11 @@ namespace SevenThree.Modules
             await ClearChannel();
         }
 
-        private async Task<List<Questions>> GetRandomQuestions(int numQuestions, string testName, bool figuresOnly = false)
+        private async Task<List<Questions>> GetRandomQuestions(int numQuestions, int testId, bool figuresOnly = false)
         {
             using var db = _contextFactory.CreateDbContext();
 
-            var query = db.Questions.Include(q => q.Test).Where(q => q.Test.TestName == testName);
+            var query = db.Questions.Include(q => q.Test).Where(q => q.Test.TestId == testId);
             if (figuresOnly)
             {
                 query = query.Where(q => q.FigureName != null);
@@ -744,7 +742,7 @@ namespace SevenThree.Modules
 
             if (questions.Count == 0)
             {
-                _logger.LogWarning("No questions found for test {TestName}", testName);
+                _logger.LogWarning("No questions found for test ID {TestId}", testId);
                 return new List<Questions>();
             }
 

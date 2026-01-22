@@ -151,7 +151,17 @@ namespace SevenThree
                 .AddSingleton<PskReporterService>()
                 .AddDbContextFactory<SevenThreeContext>(options =>
                 {
-                    var connectionString = GetConnectionString();
+                    // Use connection string from already-loaded config (ConfigService loads .env)
+                    var connectionString = _config["ConnectionStrings:SevenThree"]
+                        ?? _config["ConnectionString"]
+                        ?? Environment.GetEnvironmentVariable("SEVENTHREE_ConnectionStrings__SevenThree")
+                        ?? "Host=localhost;Database=seventhree;Username=postgres;Password=postgres";
+
+                    if (connectionString == "Host=localhost;Database=seventhree;Username=postgres;Password=postgres")
+                    {
+                        Log.Warning("No connection string found, using default localhost connection");
+                    }
+
                     options.UseNpgsql(connectionString);
                 });
 
@@ -179,41 +189,6 @@ namespace SevenThree
             }
 
             return services.BuildServiceProvider();
-        }
-
-        private static string GetConnectionString()
-        {
-            // Load .env file based on environment
-            var environment = Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "development";
-            var envFile = environment.ToLower() switch
-            {
-                "production" => ".env.production",
-                "docker" => ".env.development.docker",
-                _ => ".env.development"
-            };
-
-            var envPath = Path.Combine(Directory.GetCurrentDirectory(), envFile);
-            if (!File.Exists(envPath))
-            {
-                envPath = Path.Combine(AppContext.BaseDirectory, envFile);
-            }
-
-            if (File.Exists(envPath))
-            {
-                DotNetEnv.Env.Load(envPath);
-            }
-
-            // Check environment variable first
-            var connectionString = Environment.GetEnvironmentVariable("SEVENTHREE_ConnectionStrings__SevenThree");
-
-            // Fallback to default
-            if (string.IsNullOrEmpty(connectionString))
-            {
-                connectionString = "Host=localhost;Database=seventhree;Username=postgres;Password=postgres";
-                Log.Warning("No connection string found, using default localhost connection");
-            }
-
-            return connectionString;
         }
     }
 }

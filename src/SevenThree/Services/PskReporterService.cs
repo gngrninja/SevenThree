@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Serialization;
 using Microsoft.Extensions.Logging;
@@ -14,11 +15,12 @@ namespace SevenThree.Services
     /// <summary>
     /// Service for interacting with the PSKReporter API
     /// </summary>
-    public class PskReporterService
+    public class PskReporterService : IDisposable
     {
         private readonly ILogger<PskReporterService> _logger;
         private readonly HttpClient _httpClient;
         private readonly ConcurrentDictionary<ulong, DateTime> _userCooldowns = new();
+        private readonly CancellationTokenSource _cleanupCts = new();
 
         // Cache for paginated results
         private readonly ConcurrentDictionary<string, CachedSpotResult> _spotCache = new();
@@ -33,7 +35,7 @@ namespace SevenThree.Services
         private static readonly TimeSpan UserCooldown = TimeSpan.FromSeconds(30);
         private static readonly TimeSpan GlobalCooldown = TimeSpan.FromSeconds(5);
         private DateTime _lastGlobalRequest = DateTime.MinValue;
-        private readonly object _globalLock = new();
+        private readonly SemaphoreSlim _globalLock = new(1, 1);
 
         public PskReporterService(ILogger<PskReporterService> logger)
         {
@@ -44,15 +46,30 @@ namespace SevenThree.Services
             };
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "SevenThree-Discord-Bot/1.0");
 
-            // Cleanup expired cache entries periodically
+            // Cleanup expired cache entries periodically with cancellation support
             _ = Task.Run(async () =>
             {
-                while (true)
+                try
                 {
-                    await Task.Delay(TimeSpan.FromMinutes(5));
-                    CleanupCache();
+                    while (!_cleanupCts.Token.IsCancellationRequested)
+                    {
+                        await Task.Delay(TimeSpan.FromMinutes(5), _cleanupCts.Token);
+                        CleanupCache();
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    // Expected on shutdown
                 }
             });
+        }
+
+        public void Dispose()
+        {
+            _cleanupCts.Cancel();
+            _cleanupCts.Dispose();
+            _httpClient.Dispose();
+            _globalLock.Dispose();
         }
 
         /// <summary>
@@ -219,16 +236,21 @@ namespace SevenThree.Services
 
         private async Task<PskReporterXml.ReceptionReports> FetchAndParseAsync(string url)
         {
-            // Global rate limiting
-            lock (_globalLock)
+            // Global rate limiting with async wait
+            await _globalLock.WaitAsync().ConfigureAwait(false);
+            try
             {
                 var elapsed = DateTime.UtcNow - _lastGlobalRequest;
                 if (elapsed < GlobalCooldown)
                 {
                     var waitTime = GlobalCooldown - elapsed;
-                    Task.Delay(waitTime).Wait();
+                    await Task.Delay(waitTime).ConfigureAwait(false);
                 }
                 _lastGlobalRequest = DateTime.UtcNow;
+            }
+            finally
+            {
+                _globalLock.Release();
             }
 
             try
