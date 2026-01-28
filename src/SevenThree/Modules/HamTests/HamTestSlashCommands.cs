@@ -86,35 +86,67 @@ namespace SevenThree.Modules
         [SlashCommand("stop", "Stop the current practice exam")]
         public async Task StopQuiz()
         {
-            using var db = _contextFactory.CreateDbContext();
-            ulong id = GetId();
-            var quiz = await db.Quiz.Where(q => q.ServerId == id && q.IsActive).FirstOrDefaultAsync();
+            // Defer immediately to avoid Discord timeout
+            await DeferAsync(ephemeral: true);
 
-            if (quiz == null)
+            try
             {
-                await RespondAsync("No quiz to end!", ephemeral: true);
-                return;
+                using var db = _contextFactory.CreateDbContext();
+
+                ulong channelId = GetId();
+                ulong userId = Context.User.Id;
+
+                // Find quiz that either:
+                // 1. Was started by this user (allows stopping own quiz from anywhere)
+                // 2. Is running in this channel (allows moderators to stop channel quizzes)
+                var quiz = await db.Quiz
+                    .Where(q => (q.StartedById == userId || q.ServerId == channelId) && q.IsActive)
+                    .FirstOrDefaultAsync();
+
+                if (quiz == null)
+                {
+                    await FollowupAsync("No quiz to end!", ephemeral: true);
+                    return;
+                }
+
+                var gUser = Context.User as IGuildUser;
+                bool canStop = Context.User.Id == quiz.StartedById ||
+                              (gUser != null && gUser.GuildPermissions.KickMembers);
+
+                if (!canStop)
+                {
+                    await FollowupAsync($"Sorry, {Context.User.Mention}, a test can only be stopped by the person who started it, or by someone with at least **KickMembers** permissions!", ephemeral: true);
+                    return;
+                }
+
+                // Try to stop the running quiz (use the quiz's ServerId as the key)
+                QuizUtil trivia = null;
+                if (_hamTestService.RunningTests.TryRemove(quiz.ServerId, out trivia))
+                {
+                    await trivia.StopQuiz().ConfigureAwait(false);
+                    await FollowupAsync("Quiz stopped!", ephemeral: true);
+                }
+                else
+                {
+                    // Orphaned quiz - exists in DB but not in memory
+                    // Clean up the database record
+                    quiz.IsActive = false;
+                    quiz.TimeEnded = DateTime.UtcNow;
+                    await db.SaveChangesAsync();
+                    await FollowupAsync("Quiz stopped! (cleaned up orphaned session)", ephemeral: true);
+                }
             }
-
-            var gUser = Context.User as IGuildUser;
-            bool canStop = Context.User.Id == quiz.StartedById ||
-                          (gUser != null && gUser.GuildPermissions.KickMembers);
-
-            if (!canStop)
+            catch (Exception ex)
             {
-                await RespondAsync($"Sorry, {Context.User.Mention}, a test can only be stopped by the person who started it, or by someone with at least **KickMembers** permissions!", ephemeral: true);
-                return;
-            }
-
-            QuizUtil trivia = null;
-            if (_hamTestService.RunningTests.TryRemove(id, out trivia))
-            {
-                await trivia.StopQuiz().ConfigureAwait(false);
-                await RespondAsync("Quiz stopped!", ephemeral: true);
-            }
-            else
-            {
-                await RespondAsync("No quiz to end!", ephemeral: true);
+                _logger.LogError(ex, "Error in StopQuiz");
+                try
+                {
+                    await FollowupAsync("An error occurred stopping the quiz. Please try again.", ephemeral: true);
+                }
+                catch
+                {
+                    // Followup failed, nothing more we can do
+                }
             }
         }
 
@@ -319,130 +351,150 @@ namespace SevenThree.Modules
 
         private async Task StartTest(LicenseType license, int? testId, int numQuestions, int questionDelay, QuizMode mode)
         {
-            using var db = _contextFactory.CreateDbContext();
-            var testName = license.ToString().ToLower();
             var isPrivate = mode == QuizMode.Private;
 
-            // Validate delay using constants
-            var originalDelay = questionDelay;
-            questionDelay = Math.Clamp(questionDelay, QuizConstants.MIN_DELAY_SECONDS, QuizConstants.MAX_DELAY_SECONDS);
-            var delayWasClamped = originalDelay != questionDelay;
+            // Defer immediately to avoid Discord timeout (gives us 15 minutes)
+            await DeferAsync(ephemeral: isPrivate);
 
-            // Resolve test pool if not specified
-            HamTest selectedPool = null;
-            if (testId.HasValue)
+            try
             {
-                selectedPool = await db.HamTest.Where(t => t.TestId == testId.Value).FirstOrDefaultAsync();
-            }
+                using var db = _contextFactory.CreateDbContext();
+                var testName = license.ToString().ToLower();
 
-            if (selectedPool == null)
-            {
-                // Find current pool (today is between FromDate and ToDate)
-                var today = DateTime.UtcNow.Date;
-                selectedPool = await db.HamTest
-                    .Where(t => t.TestName == testName && t.FromDate <= today && t.ToDate >= today)
-                    .FirstOrDefaultAsync();
+                // Validate delay using constants
+                var originalDelay = questionDelay;
+                questionDelay = Math.Clamp(questionDelay, QuizConstants.MIN_DELAY_SECONDS, QuizConstants.MAX_DELAY_SECONDS);
+                var delayWasClamped = originalDelay != questionDelay;
 
-                // Fall back to most recent pool if no current pool
-                selectedPool ??= await db.HamTest
-                    .Where(t => t.TestName == testName)
-                    .OrderByDescending(t => t.FromDate)
-                    .FirstOrDefaultAsync();
-            }
-
-            if (selectedPool == null)
-            {
-                await RespondAsync($"No question pool found for {testName.ToUpper()}. Use `/quiz import {testName}` first.", ephemeral: true);
-                return;
-            }
-
-            // Check channel restrictions (only for public mode)
-            if (Context.Guild != null && !isPrivate)
-            {
-                var channelInfo = await db.QuizSettings
-                    .Where(q => q.DiscordGuildId == Context.Guild.Id)
-                    .FirstOrDefaultAsync();
-
-                if (channelInfo != null)
+                // Resolve test pool if not specified
+                HamTest selectedPool = null;
+                if (testId.HasValue)
                 {
-                    ulong? requiredChannel = testName switch
-                    {
-                        "tech" => channelInfo.TechChannelId,
-                        "general" => channelInfo.GeneralChannelId,
-                        "extra" => channelInfo.ExtraChannelId,
-                        _ => null
-                    };
+                    selectedPool = await db.HamTest.Where(t => t.TestId == testId.Value).FirstOrDefaultAsync();
+                }
 
-                    if (requiredChannel.HasValue && requiredChannel != Context.Channel.Id)
+                if (selectedPool == null)
+                {
+                    // Find current pool (today is between FromDate and ToDate)
+                    var today = DateTime.UtcNow.Date;
+                    selectedPool = await db.HamTest
+                        .Where(t => t.TestName == testName && t.FromDate <= today && t.ToDate >= today)
+                        .FirstOrDefaultAsync();
+
+                    // Fall back to most recent pool if no current pool
+                    selectedPool ??= await db.HamTest
+                        .Where(t => t.TestName == testName)
+                        .OrderByDescending(t => t.FromDate)
+                        .FirstOrDefaultAsync();
+                }
+
+                if (selectedPool == null)
+                {
+                    await FollowupAsync($"No question pool found for {testName.ToUpper()}. Use `/quiz import {testName}` first.", ephemeral: isPrivate);
+                    return;
+                }
+
+                // Check channel restrictions (only for public mode)
+                if (Context.Guild != null && !isPrivate)
+                {
+                    var channelInfo = await db.QuizSettings
+                        .Where(q => q.DiscordGuildId == Context.Guild.Id)
+                        .FirstOrDefaultAsync();
+
+                    if (channelInfo != null)
                     {
-                        await RespondAsync($"{testName.ToUpper()} test commands cannot be used in this channel, please use them in <#{requiredChannel}>!", ephemeral: true);
-                        return;
+                        ulong? requiredChannel = testName switch
+                        {
+                            "tech" => channelInfo.TechChannelId,
+                            "general" => channelInfo.GeneralChannelId,
+                            "extra" => channelInfo.ExtraChannelId,
+                            _ => null
+                        };
+
+                        if (requiredChannel.HasValue && requiredChannel != Context.Channel.Id)
+                        {
+                            await FollowupAsync($"{testName.ToUpper()} test commands cannot be used in this channel, please use them in <#{requiredChannel}>!", ephemeral: isPrivate);
+                            return;
+                        }
                     }
                 }
-            }
 
-            ulong id = isPrivate ? Context.User.Id : GetId();
+                ulong id = isPrivate ? Context.User.Id : GetId();
 
-            var checkQuiz = db.Quiz.Where(q => q.ServerId == id && q.IsActive).FirstOrDefault();
-            if (checkQuiz != null)
-            {
-                await RespondAsync("There is already an active quiz!", ephemeral: true);
-                return;
-            }
-
-            await db.Quiz.AddAsync(new Quiz
-            {
-                ServerId = id,
-                IsActive = true,
-                TimeStarted = DateTime.UtcNow,
-                StartedById = Context.User.Id,
-                StartedByName = Context.User.Username,
-                StartedByIconUrl = Context.User.GetAvatarUrl()
-            });
-            await db.SaveChangesAsync();
-
-            QuizUtil startQuiz;
-            if (isPrivate)
-            {
-                startQuiz = new QuizUtil(
-                    user: Context.User as IUser,
-                    services: _services,
-                    guild: Context.Guild as IGuild,
-                    id: id
-                );
-            }
-            else
-            {
-                startQuiz = new QuizUtil(
-                    channel: Context.Channel as ITextChannel,
-                    services: _services,
-                    guild: Context.Guild as IGuild,
-                    id: id
-                );
-            }
-
-            // Set the quiz mode
-            startQuiz.SetQuizMode(mode);
-
-            if (_hamTestService.RunningTests.TryAdd(id, startQuiz))
-            {
-                var poolInfo = $"{selectedPool.FromDate:yyyy-MM-dd} to {selectedPool.ToDate:yyyy-MM-dd}";
-                var delayNote = delayWasClamped ? $" (delay adjusted to {questionDelay}s)" : "";
-                await RespondAsync($"Starting {testName.ToUpper()} practice exam [{poolInfo}] with {numQuestions} questions. Answer using buttons!{delayNote}", ephemeral: isPrivate);
-
-                var quiz = await db.Quiz.Where(q => q.ServerId == id && q.IsActive).FirstOrDefaultAsync();
-                try
+                var checkQuiz = db.Quiz.Where(q => q.ServerId == id && q.IsActive).FirstOrDefault();
+                if (checkQuiz != null)
                 {
+                    await FollowupAsync("There is already an active quiz!", ephemeral: isPrivate);
+                    return;
+                }
+
+                // Validate that the pool has questions before creating the quiz
+                var questionCount = await db.Questions.CountAsync(q => q.Test.TestId == selectedPool.TestId);
+                if (questionCount == 0)
+                {
+                    await FollowupAsync($"No questions found in the {testName.ToUpper()} pool. The pool may need to be imported.", ephemeral: isPrivate);
+                    return;
+                }
+
+                await db.Quiz.AddAsync(new Quiz
+                {
+                    ServerId = id,
+                    IsActive = true,
+                    TimeStarted = DateTime.UtcNow,
+                    StartedById = Context.User.Id,
+                    StartedByName = Context.User.Username,
+                    StartedByIconUrl = Context.User.GetAvatarUrl()
+                });
+                await db.SaveChangesAsync();
+
+                QuizUtil startQuiz;
+                if (isPrivate)
+                {
+                    startQuiz = new QuizUtil(
+                        user: Context.User as IUser,
+                        services: _services,
+                        guild: Context.Guild as IGuild,
+                        id: id
+                    );
+                }
+                else
+                {
+                    startQuiz = new QuizUtil(
+                        channel: Context.Channel as ITextChannel,
+                        services: _services,
+                        guild: Context.Guild as IGuild,
+                        id: id
+                    );
+                }
+
+                // Set the quiz mode
+                startQuiz.SetQuizMode(mode);
+
+                if (_hamTestService.RunningTests.TryAdd(id, startQuiz))
+                {
+                    var poolInfo = $"{selectedPool.FromDate:yyyy-MM-dd} to {selectedPool.ToDate:yyyy-MM-dd}";
+                    var delayNote = delayWasClamped ? $" (delay adjusted to {questionDelay}s)" : "";
+                    await FollowupAsync($"Starting {testName.ToUpper()} practice exam [{poolInfo}] with {numQuestions} questions. Answer using buttons!{delayNote}", ephemeral: isPrivate);
+
+                    var quiz = await db.Quiz.Where(q => q.ServerId == id && q.IsActive).FirstOrDefaultAsync();
                     await startQuiz.StartGame(quiz, numQuestions, selectedPool.TestId, questionDelay * 1000).ConfigureAwait(false);
                 }
-                catch (Exception ex)
+                else
                 {
-                    _logger.LogError(ex, "Error starting quiz");
+                    await FollowupAsync("There is already an active quiz!", ephemeral: isPrivate);
                 }
             }
-            else
+            catch (Exception ex)
             {
-                await RespondAsync("There is already an active quiz!", ephemeral: true);
+                _logger.LogError(ex, "Error in StartTest");
+                try
+                {
+                    await FollowupAsync("An error occurred starting the quiz. Please try again.", ephemeral: isPrivate);
+                }
+                catch
+                {
+                    // Followup failed, nothing more we can do
+                }
             }
         }
 

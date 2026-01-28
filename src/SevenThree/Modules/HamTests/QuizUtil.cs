@@ -671,12 +671,30 @@ namespace SevenThree.Modules
             ShouldStopTest = true;
 
             using var db = _contextFactory.CreateDbContext();
-            var quiz = await db.Quiz.Where(q => q.QuizId == Quiz.QuizId).FirstOrDefaultAsync();
+
+            // Find quiz by QuizId if available, otherwise by ServerId (handles startup failure)
+            Database.Quiz quiz;
+            if (Quiz != null)
+            {
+                quiz = await db.Quiz.Where(q => q.QuizId == Quiz.QuizId).FirstOrDefaultAsync();
+            }
+            else
+            {
+                // Fallback: find active quiz by ServerId (startup failure case - Quiz was never set)
+                quiz = await db.Quiz.Where(q => q.ServerId == Id && q.IsActive).FirstOrDefaultAsync();
+            }
+
             if (quiz != null)
             {
                 quiz.TimeEnded = DateTime.UtcNow;
                 quiz.IsActive = false;
                 await db.SaveChangesAsync();
+            }
+
+            // If Quiz was never set (startup failure), skip the results embed
+            if (Quiz == null)
+            {
+                return;
             }
 
             var embed = new EmbedBuilder();
