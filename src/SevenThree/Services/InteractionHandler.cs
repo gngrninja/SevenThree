@@ -165,12 +165,24 @@ namespace SevenThree.Services
                     await component.DeferAsync();
                 }
             }
+            catch (Discord.Net.HttpException ex) when (ex.DiscordCode == Discord.DiscordErrorCode.UnknownInteraction)
+            {
+                // Interaction expired - nothing we can do
+                _logger.LogWarning("Button interaction expired before we could respond");
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Exception handling button interaction");
-                if (!component.HasResponded)
+                try
                 {
-                    await component.RespondAsync("An error occurred processing your response.", ephemeral: true);
+                    if (!component.HasResponded)
+                    {
+                        await component.RespondAsync("An error occurred processing your response.", ephemeral: true);
+                    }
+                }
+                catch
+                {
+                    // Failed to respond - interaction likely expired, nothing more we can do
                 }
             }
         }

@@ -129,21 +129,42 @@ namespace SevenThree.Modules
                     continue;
                 }
 
+                bool wasAnswered = false;
                 try
                 {
                     IsActive = true;
                     try
                     {
                         await Task.Delay(_questionDelay, _tokenSource.Token).ConfigureAwait(false);
+                        // If we reach here, the delay completed naturally (timeout, no answer)
                     }
                     catch (TaskCanceledException)
                     {
                         // Answer received via button click - expected behavior
+                        wasAnswered = true;
                     }
                 }
                 finally
                 {
                     IsActive = false;
+
+                    // If question timed out (not answered), disable buttons showing correct answer
+                    if (!wasAnswered && !ShouldStopTest && _currentButtonMessage != null)
+                    {
+                        try
+                        {
+                            var timedOutButtons = BuildTimedOutButtons();
+                            await _currentButtonMessage.ModifyAsync(m =>
+                            {
+                                m.Components = timedOutButtons;
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to disable buttons on timed-out question");
+                        }
+                    }
+
                     if (!ShouldStopTest && _quizMode == QuizMode.Public)
                     {
                         await SendQuestionResultsAsync();
@@ -408,8 +429,8 @@ namespace SevenThree.Modules
                     });
                 }
 
-                // Send result as followup
-                await component.FollowupAsync(embed: resultEmbed.Build(), ephemeral: _quizMode == QuizMode.Private);
+                // Send result as followup (always ephemeral so only the answerer sees their result)
+                await component.FollowupAsync(embed: resultEmbed.Build(), ephemeral: true);
 
                 // Cancel the timeout to advance to next question
                 _tokenSource?.Cancel();
@@ -443,6 +464,38 @@ namespace SevenThree.Modules
                 label: "Stop Quiz",
                 customId: $"{QuizConstants.STOP_BUTTON_PREFIX}:{Id}",
                 style: ButtonStyle.Danger,
+                row: 1
+            );
+
+            return builder.Build();
+        }
+
+        /// <summary>
+        /// Build disabled buttons for a timed-out question (no answer selected, show correct answer)
+        /// </summary>
+        private MessageComponent BuildTimedOutButtons()
+        {
+            var builder = new ComponentBuilder();
+
+            foreach (var answer in Answers)
+            {
+                var style = answer.Item2.IsAnswer ? ButtonStyle.Success : ButtonStyle.Secondary;
+
+                builder.WithButton(
+                    label: answer.Item1.ToString(),
+                    customId: $"{QuizConstants.BUTTON_PREFIX}:timeout:{answer.Item1}",
+                    style: style,
+                    disabled: true,
+                    row: 0
+                );
+            }
+
+            // Add disabled stop button on row 1
+            builder.WithButton(
+                label: "Stop Quiz",
+                customId: $"{QuizConstants.STOP_BUTTON_PREFIX}:timeout",
+                style: ButtonStyle.Secondary,
+                disabled: true,
                 row: 1
             );
 
@@ -640,13 +693,16 @@ namespace SevenThree.Modules
         private async Task<List<Tuple<ulong, int>>> GetTopUsers()
         {
             using var db = _contextFactory.CreateDbContext();
-            var userResults = await db.UserAnswer
+            // Fetch grouped data first, then project to tuples in memory
+            // (EF Core can't translate Tuple.Create to SQL)
+            var grouped = await db.UserAnswer
                 .Where(u => u.Quiz.QuizId == Quiz.QuizId && u.IsAnswer)
                 .GroupBy(u => u.UserId)
-                .Select(g => Tuple.Create((ulong)g.Key, g.Count()))
-                .OrderByDescending(t => t.Item2)
+                .Select(g => new { UserId = g.Key, Count = g.Count() })
+                .OrderByDescending(x => x.Count)
                 .ToListAsync();
-            return userResults;
+
+            return grouped.Select(x => Tuple.Create((ulong)x.UserId, x.Count)).ToList();
         }
 
         private async Task<List<UserAnswer>> GetCorrectUsersFromQuestion()

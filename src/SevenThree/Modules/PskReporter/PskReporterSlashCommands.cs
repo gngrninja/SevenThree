@@ -29,21 +29,21 @@ namespace SevenThree.Modules.PskReporter
             [Summary("callsign", "The callsign to look up")] string callsign,
             [Summary("minutes", "Time window in minutes (default: 60, max: 360)")] int minutes = 60)
         {
-            if (_pskService.IsOnCooldown(Context.User.Id, out var remaining))
-            {
-                await RespondAsync(
-                    $"Please wait {remaining.TotalSeconds:F0} seconds before making another PSKReporter request.",
-                    ephemeral: true);
-                return;
-            }
-
+            // Defer IMMEDIATELY to avoid 3-second timeout
             await DeferAsync();
-
-            minutes = Math.Clamp(minutes, 5, 360);
-            callsign = callsign.ToUpperInvariant().Trim();
 
             try
             {
+                if (_pskService.IsOnCooldown(Context.User.Id, out var remaining))
+                {
+                    await FollowupAsync(
+                        $"Please wait {remaining.TotalSeconds:F0} seconds before making another PSKReporter request.");
+                    return;
+                }
+
+                minutes = Math.Clamp(minutes, 5, 360);
+                callsign = callsign.ToUpperInvariant().Trim();
+
                 var reports = await _pskService.GetSenderSpotsAsync(callsign, Context.User.Id, minutes, 500);
                 var spots = _pskService.ConvertToSpotInfo(reports);
 
@@ -75,21 +75,21 @@ namespace SevenThree.Modules.PskReporter
             [Summary("callsign", "The receiving station callsign")] string callsign,
             [Summary("minutes", "Time window in minutes (default: 60, max: 360)")] int minutes = 60)
         {
-            if (_pskService.IsOnCooldown(Context.User.Id, out var remaining))
-            {
-                await RespondAsync(
-                    $"Please wait {remaining.TotalSeconds:F0} seconds before making another PSKReporter request.",
-                    ephemeral: true);
-                return;
-            }
-
+            // Defer IMMEDIATELY to avoid 3-second timeout
             await DeferAsync();
-
-            minutes = Math.Clamp(minutes, 5, 360);
-            callsign = callsign.ToUpperInvariant().Trim();
 
             try
             {
+                if (_pskService.IsOnCooldown(Context.User.Id, out var remaining))
+                {
+                    await FollowupAsync(
+                        $"Please wait {remaining.TotalSeconds:F0} seconds before making another PSKReporter request.");
+                    return;
+                }
+
+                minutes = Math.Clamp(minutes, 5, 360);
+                callsign = callsign.ToUpperInvariant().Trim();
+
                 var reports = await _pskService.GetReceiverSpotsAsync(callsign, Context.User.Id, minutes, 500);
                 var spots = _pskService.ConvertToSpotInfo(reports);
 
@@ -121,21 +121,21 @@ namespace SevenThree.Modules.PskReporter
             [Summary("callsign", "The callsign to analyze")] string callsign,
             [Summary("minutes", "Time window in minutes (default: 60, max: 360)")] int minutes = 60)
         {
-            if (_pskService.IsOnCooldown(Context.User.Id, out var remaining))
-            {
-                await RespondAsync(
-                    $"Please wait {remaining.TotalSeconds:F0} seconds before making another PSKReporter request.",
-                    ephemeral: true);
-                return;
-            }
-
+            // Defer IMMEDIATELY to avoid 3-second timeout
             await DeferAsync();
-
-            minutes = Math.Clamp(minutes, 5, 360);
-            callsign = callsign.ToUpperInvariant().Trim();
 
             try
             {
+                if (_pskService.IsOnCooldown(Context.User.Id, out var remaining))
+                {
+                    await FollowupAsync(
+                        $"Please wait {remaining.TotalSeconds:F0} seconds before making another PSKReporter request.");
+                    return;
+                }
+
+                minutes = Math.Clamp(minutes, 5, 360);
+                callsign = callsign.ToUpperInvariant().Trim();
+
                 var reports = await _pskService.GetSenderSpotsAsync(callsign, Context.User.Id, minutes, 500);
                 var spots = _pskService.ConvertToSpotInfo(reports);
                 var stats = _pskService.BuildPropagationStats(callsign, spots, minutes);
@@ -181,27 +181,28 @@ namespace SevenThree.Modules.PskReporter
             string mode = null,
             [Summary("minutes", "Time window in minutes (default: 15, max: 60)")] int minutes = 15)
         {
-            if (_pskService.IsOnCooldown(Context.User.Id, out var remaining))
-            {
-                await RespondAsync(
-                    $"Please wait {remaining.TotalSeconds:F0} seconds before making another PSKReporter request.",
-                    ephemeral: true);
-                return;
-            }
-
-            var freqRange = PskReporterService.GetBandFrequencyRange(band);
-            if (!freqRange.HasValue)
-            {
-                await RespondAsync($"Unknown band: {band}", ephemeral: true);
-                return;
-            }
-
+            // Defer IMMEDIATELY to avoid 3-second timeout
             await DeferAsync();
-
-            minutes = Math.Clamp(minutes, 5, 60);
 
             try
             {
+                // Now we have 15 minutes - do validation
+                if (_pskService.IsOnCooldown(Context.User.Id, out var remaining))
+                {
+                    await FollowupAsync(
+                        $"Please wait {remaining.TotalSeconds:F0} seconds before making another PSKReporter request.");
+                    return;
+                }
+
+                var freqRange = PskReporterService.GetBandFrequencyRange(band);
+                if (!freqRange.HasValue)
+                {
+                    await FollowupAsync($"Unknown band: {band}");
+                    return;
+                }
+
+                minutes = Math.Clamp(minutes, 5, 60);
+
                 var reports = await _pskService.GetBandActivityAsync(
                     Context.User.Id,
                     freqRange.Value.Low,

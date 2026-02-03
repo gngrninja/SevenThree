@@ -28,61 +28,81 @@ namespace SevenThree.Modules.PskReporter
         /// </summary>
         public async Task HandlePskButtonAsync(SocketMessageComponent component)
         {
-            var parts = component.Data.CustomId.Split(':');
-            if (parts.Length < 3)
+            try
             {
-                await component.RespondAsync("Invalid button.", ephemeral: true);
-                return;
+                // Parse button data (fast, synchronous)
+                var parts = component.Data.CustomId.Split(':');
+                if (parts.Length < 3)
+                {
+                    await component.RespondAsync("Invalid button.", ephemeral: true);
+                    return;
+                }
+
+                var action = parts[1]; // "prev", "next", "page"
+                var sessionId = parts[2];
+
+                // "page" button is disabled, ignore - just acknowledge
+                if (action == "page")
+                {
+                    await component.DeferAsync();
+                    return;
+                }
+
+                // Get current page from button customId
+                if (parts.Length < 4 || !int.TryParse(parts[3], out var currentPage))
+                {
+                    await component.RespondAsync("Invalid button state.", ephemeral: true);
+                    return;
+                }
+
+                // Get cached data
+                var cached = _pskService.GetCachedSpots(sessionId);
+                if (cached == null)
+                {
+                    // Cache expired - update the original message to show expiration notice
+                    // Using UpdateAsync modifies the message in-place (no new ephemeral message)
+                    await component.UpdateAsync(msg =>
+                    {
+                        msg.Content = "⚠️ This result has expired. Please run the command again.";
+                        msg.Embed = null;
+                        msg.Components = new ComponentBuilder().Build(); // Remove buttons
+                    });
+                    return;
+                }
+
+                // Calculate new page
+                var newPage = action switch
+                {
+                    "prev" => Math.Max(0, currentPage - 1),
+                    "next" => Math.Min(cached.TotalPages - 1, currentPage + 1),
+                    _ => currentPage
+                };
+
+                // Build updated embed and buttons
+                var embed = PskReporterSlashCommands.BuildPaginatedEmbed(cached, newPage);
+                var components = PskReporterSlashCommands.BuildNavigationButtons(sessionId, newPage, cached.TotalPages);
+
+                // Update the message in place
+                await component.UpdateAsync(msg =>
+                {
+                    msg.Content = null;
+                    msg.Embed = embed;
+                    msg.Components = components;
+                });
+
+                _logger.LogDebug("PSK pagination: {Action} to page {Page} for session {SessionId}",
+                    action, newPage + 1, sessionId);
             }
-
-            var action = parts[1]; // "prev", "next", "page"
-            var sessionId = parts[2];
-
-            // "page" button is disabled, ignore
-            if (action == "page")
+            catch (Discord.Net.HttpException ex) when (ex.DiscordCode == Discord.DiscordErrorCode.UnknownInteraction)
             {
-                await component.DeferAsync();
-                return;
+                // Interaction token expired (>3 seconds) - nothing we can do
+                _logger.LogWarning("PSK button interaction expired before we could respond");
             }
-
-            // Get current page from button customId
-            if (parts.Length < 4 || !int.TryParse(parts[3], out var currentPage))
+            catch (Discord.Net.HttpException ex) when (ex.DiscordCode == Discord.DiscordErrorCode.InteractionHasAlreadyBeenAcknowledged)
             {
-                await component.RespondAsync("Invalid button state.", ephemeral: true);
-                return;
+                // Already responded - this can happen in race conditions, ignore
+                _logger.LogDebug("PSK button interaction was already acknowledged");
             }
-
-            // Get cached data
-            var cached = _pskService.GetCachedSpots(sessionId);
-            if (cached == null)
-            {
-                await component.RespondAsync(
-                    "This result has expired. Please run the command again.",
-                    ephemeral: true);
-                return;
-            }
-
-            // Calculate new page
-            var newPage = action switch
-            {
-                "prev" => Math.Max(0, currentPage - 1),
-                "next" => Math.Min(cached.TotalPages - 1, currentPage + 1),
-                _ => currentPage
-            };
-
-            // Build updated embed and buttons
-            var embed = PskReporterSlashCommands.BuildPaginatedEmbed(cached, newPage);
-            var components = PskReporterSlashCommands.BuildNavigationButtons(sessionId, newPage, cached.TotalPages);
-
-            // Update the message
-            await component.UpdateAsync(msg =>
-            {
-                msg.Embed = embed;
-                msg.Components = components;
-            });
-
-            _logger.LogDebug("PSK pagination: {Action} to page {Page} for session {SessionId}",
-                action, newPage + 1, sessionId);
         }
     }
 }

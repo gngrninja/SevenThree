@@ -96,22 +96,40 @@ namespace SevenThree.Modules
                 ulong channelId = GetId();
                 ulong userId = Context.User.Id;
 
-                // Find quiz that either:
-                // 1. Was started by this user (allows stopping own quiz from anywhere)
-                // 2. Is running in this channel (allows moderators to stop channel quizzes)
+                // For private quizzes, the key is the user's ID
+                // For public quizzes, the key is the channel ID
+                // Check both possible keys in the dictionary
+                QuizUtil triviaFromDict = null;
+                ulong foundKey = 0;
+
+                // Try user ID first (private quiz)
+                if (_hamTestService.RunningTests.TryGetValue(userId, out triviaFromDict))
+                {
+                    foundKey = userId;
+                }
+                // Try channel ID (public quiz)
+                else if (_hamTestService.RunningTests.TryGetValue(channelId, out triviaFromDict))
+                {
+                    foundKey = channelId;
+                }
+
+                // Also check DB for quiz record
                 var quiz = await db.Quiz
-                    .Where(q => (q.StartedById == userId || q.ServerId == channelId) && q.IsActive)
+                    .Where(q => (q.StartedById == userId || q.ServerId == channelId || q.ServerId == userId) && q.IsActive)
                     .FirstOrDefaultAsync();
 
-                if (quiz == null)
+                // No quiz in dictionary AND no quiz in DB
+                if (triviaFromDict == null && quiz == null)
                 {
                     await FollowupAsync("No quiz to end!", ephemeral: true);
                     return;
                 }
 
+                // Permission check - use DB record if available, otherwise allow owner
                 var gUser = Context.User as IGuildUser;
-                bool canStop = Context.User.Id == quiz.StartedById ||
-                              (gUser != null && gUser.GuildPermissions.KickMembers);
+                bool canStop = (quiz != null && Context.User.Id == quiz.StartedById) ||
+                              (gUser != null && gUser.GuildPermissions.KickMembers) ||
+                              (quiz == null && triviaFromDict != null); // Allow stopping orphaned dict entries
 
                 if (!canStop)
                 {
@@ -119,21 +137,32 @@ namespace SevenThree.Modules
                     return;
                 }
 
-                // Try to stop the running quiz (use the quiz's ServerId as the key)
-                QuizUtil trivia = null;
-                if (_hamTestService.RunningTests.TryRemove(quiz.ServerId, out trivia))
+                // Stop quiz in dictionary if present
+                if (triviaFromDict != null && _hamTestService.RunningTests.TryRemove(foundKey, out var trivia))
                 {
                     await trivia.StopQuiz().ConfigureAwait(false);
-                    await FollowupAsync("Quiz stopped!", ephemeral: true);
                 }
-                else
+
+                // Clean up DB record if present
+                if (quiz != null)
                 {
-                    // Orphaned quiz - exists in DB but not in memory
-                    // Clean up the database record
                     quiz.IsActive = false;
                     quiz.TimeEnded = DateTime.UtcNow;
                     await db.SaveChangesAsync();
-                    await FollowupAsync("Quiz stopped! (cleaned up orphaned session)", ephemeral: true);
+                }
+
+                // Report what was cleaned up
+                if (triviaFromDict != null && quiz != null)
+                {
+                    await FollowupAsync("Quiz stopped!", ephemeral: true);
+                }
+                else if (triviaFromDict != null)
+                {
+                    await FollowupAsync("Quiz stopped! (cleaned up orphaned memory session)", ephemeral: true);
+                }
+                else
+                {
+                    await FollowupAsync("Quiz stopped! (cleaned up orphaned database session)", ephemeral: true);
                 }
             }
             catch (Exception ex)
@@ -421,14 +450,7 @@ namespace SevenThree.Modules
 
                 ulong id = isPrivate ? Context.User.Id : GetId();
 
-                var checkQuiz = db.Quiz.Where(q => q.ServerId == id && q.IsActive).FirstOrDefault();
-                if (checkQuiz != null)
-                {
-                    await FollowupAsync("There is already an active quiz!", ephemeral: isPrivate);
-                    return;
-                }
-
-                // Validate that the pool has questions before creating the quiz
+                // Validate that the pool has questions before doing anything else
                 var questionCount = await db.Questions.CountAsync(q => q.Test.TestId == selectedPool.TestId);
                 if (questionCount == 0)
                 {
@@ -436,17 +458,7 @@ namespace SevenThree.Modules
                     return;
                 }
 
-                await db.Quiz.AddAsync(new Quiz
-                {
-                    ServerId = id,
-                    IsActive = true,
-                    TimeStarted = DateTime.UtcNow,
-                    StartedById = Context.User.Id,
-                    StartedByName = Context.User.Username,
-                    StartedByIconUrl = Context.User.GetAvatarUrl()
-                });
-                await db.SaveChangesAsync();
-
+                // Create QuizUtil instance first (no side effects, just object construction)
                 QuizUtil startQuiz;
                 if (isPrivate)
                 {
@@ -466,22 +478,43 @@ namespace SevenThree.Modules
                         id: id
                     );
                 }
-
-                // Set the quiz mode
                 startQuiz.SetQuizMode(mode);
 
-                if (_hamTestService.RunningTests.TryAdd(id, startQuiz))
+                // Use ConcurrentDictionary.TryAdd as the atomic gate - this prevents race conditions
+                // Only one thread can successfully TryAdd for a given key
+                if (!_hamTestService.RunningTests.TryAdd(id, startQuiz))
                 {
+                    await FollowupAsync("There is already an active quiz!", ephemeral: isPrivate);
+                    return;
+                }
+
+                // We now "own" this slot - create DB record and start quiz
+                // If anything fails, we must remove from dictionary
+                try
+                {
+                    var quiz = new Quiz
+                    {
+                        ServerId = id,
+                        IsActive = true,
+                        TimeStarted = DateTime.UtcNow,
+                        StartedById = Context.User.Id,
+                        StartedByName = Context.User.Username,
+                        StartedByIconUrl = Context.User.GetAvatarUrl()
+                    };
+                    await db.Quiz.AddAsync(quiz);
+                    await db.SaveChangesAsync();
+
                     var poolInfo = $"{selectedPool.FromDate:yyyy-MM-dd} to {selectedPool.ToDate:yyyy-MM-dd}";
                     var delayNote = delayWasClamped ? $" (delay adjusted to {questionDelay}s)" : "";
                     await FollowupAsync($"Starting {testName.ToUpper()} practice exam [{poolInfo}] with {numQuestions} questions. Answer using buttons!{delayNote}", ephemeral: isPrivate);
 
-                    var quiz = await db.Quiz.Where(q => q.ServerId == id && q.IsActive).FirstOrDefaultAsync();
                     await startQuiz.StartGame(quiz, numQuestions, selectedPool.TestId, questionDelay * 1000).ConfigureAwait(false);
                 }
-                else
+                catch
                 {
-                    await FollowupAsync("There is already an active quiz!", ephemeral: isPrivate);
+                    // Failed after claiming slot - release it so user can try again
+                    _hamTestService.RunningTests.TryRemove(id, out _);
+                    throw;
                 }
             }
             catch (Exception ex)
@@ -523,6 +556,8 @@ namespace SevenThree.Modules
         public async Task SetChannel(
             [Summary("license", "License class for this channel")] LicenseType license)
         {
+            await DeferAsync(ephemeral: true);
+
             using var db = _contextFactory.CreateDbContext();
             var discordSettings = await db.QuizSettings
                 .Where(s => s.DiscordGuildId == Context.Guild.Id)
@@ -548,12 +583,14 @@ namespace SevenThree.Modules
             }
 
             await db.SaveChangesAsync();
-            await RespondAsync($"{license} test channel set to #{Context.Channel.Name}!", ephemeral: true);
+            await FollowupAsync($"{license} test channel set to #{Context.Channel.Name}!");
         }
 
         [SlashCommand("unsetchannel", "Remove this channel from quiz settings")]
         public async Task UnsetChannel()
         {
+            await DeferAsync(ephemeral: true);
+
             using var db = _contextFactory.CreateDbContext();
             var settings = await db.QuizSettings
                 .Where(s => s.DiscordGuildId == Context.Guild.Id)
@@ -561,7 +598,7 @@ namespace SevenThree.Modules
 
             if (settings == null)
             {
-                await RespondAsync("No quiz settings found for this server.", ephemeral: true);
+                await FollowupAsync("No quiz settings found for this server.");
                 return;
             }
 
@@ -585,11 +622,11 @@ namespace SevenThree.Modules
             if (found)
             {
                 await db.SaveChangesAsync();
-                await RespondAsync("Channel unset from quiz settings!", ephemeral: true);
+                await FollowupAsync("Channel unset from quiz settings!");
             }
             else
             {
-                await RespondAsync("This channel is not set for any quiz type.", ephemeral: true);
+                await FollowupAsync("This channel is not set for any quiz type.");
             }
         }
 
@@ -597,6 +634,8 @@ namespace SevenThree.Modules
         [RequireBotPermission(ChannelPermission.ManageMessages)]
         public async Task ClearAfterTaken()
         {
+            await DeferAsync(ephemeral: true);
+
             using var db = _contextFactory.CreateDbContext();
             var settings = await db.QuizSettings
                 .Where(s => s.DiscordGuildId == Context.Guild.Id)
@@ -604,7 +643,7 @@ namespace SevenThree.Modules
 
             if (settings == null || (settings.TechChannelId == null && settings.GeneralChannelId == null && settings.ExtraChannelId == null))
             {
-                await RespondAsync("Please set a channel to a specific test before using this command!", ephemeral: true);
+                await FollowupAsync("Please set a channel to a specific test before using this command!");
                 return;
             }
 
@@ -612,7 +651,7 @@ namespace SevenThree.Modules
             await db.SaveChangesAsync();
 
             var status = settings.ClearAfterTaken ? "enabled" : "disabled";
-            await RespondAsync($"Clear after test completion is now **{status}**!", ephemeral: true);
+            await FollowupAsync($"Clear after test completion is now **{status}**!");
         }
     }
 }
