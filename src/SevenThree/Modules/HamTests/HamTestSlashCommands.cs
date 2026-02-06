@@ -13,7 +13,6 @@ using SevenThree.Database;
 using SevenThree.Models;
 using SevenThree.Modules.HamTests;
 using SevenThree.Services;
-using System.IO;
 
 namespace SevenThree.Modules
 {
@@ -22,6 +21,146 @@ namespace SevenThree.Modules
         Tech,
         General,
         Extra
+    }
+
+    /// <summary>
+    /// Shorthand commands for quickly starting practice exams with defaults.
+    /// These are top-level commands (/tech, /general, /extra) without the /quiz prefix.
+    /// </summary>
+    public class QuickStartSlashCommands : InteractionModuleBase<SocketInteractionContext>
+    {
+        private readonly ILogger<QuickStartSlashCommands> _logger;
+        private readonly IServiceProvider _services;
+        private readonly HamTestService _hamTestService;
+        private readonly IDbContextFactory<SevenThreeContext> _contextFactory;
+
+        // Defaults for quick start commands
+        private const int DefaultQuestions = 35;
+        private const int DefaultDelaySeconds = 45;
+        private const QuizMode DefaultMode = QuizMode.Private;
+
+        public QuickStartSlashCommands(
+            IServiceProvider services,
+            IDbContextFactory<SevenThreeContext> contextFactory)
+        {
+            _logger = services.GetRequiredService<ILogger<QuickStartSlashCommands>>();
+            _services = services;
+            _hamTestService = services.GetRequiredService<HamTestService>();
+            _contextFactory = contextFactory;
+        }
+
+        [SlashCommand("tech", "Quick start a Technician practice exam with defaults")]
+        public async Task QuickTech()
+        {
+            await QuickStartTest(LicenseType.Tech);
+        }
+
+        [SlashCommand("general", "Quick start a General practice exam with defaults")]
+        public async Task QuickGeneral()
+        {
+            await QuickStartTest(LicenseType.General);
+        }
+
+        [SlashCommand("extra", "Quick start an Extra practice exam with defaults")]
+        public async Task QuickExtra()
+        {
+            await QuickStartTest(LicenseType.Extra);
+        }
+
+        private async Task QuickStartTest(LicenseType license)
+        {
+            // Always private and ephemeral for quick start
+            await DeferAsync(ephemeral: true);
+
+            try
+            {
+                using var db = _contextFactory.CreateDbContext();
+                var testName = license.ToString().ToLower();
+
+                // Find the current (effective) pool - today is between FromDate and ToDate
+                var today = DateTime.UtcNow.Date;
+                var selectedPool = await db.HamTest
+                    .Where(t => t.TestName == testName && t.FromDate <= today && t.ToDate >= today)
+                    .FirstOrDefaultAsync();
+
+                // Fall back to most recent pool if no current pool
+                selectedPool ??= await db.HamTest
+                    .Where(t => t.TestName == testName)
+                    .OrderByDescending(t => t.FromDate)
+                    .FirstOrDefaultAsync();
+
+                if (selectedPool == null)
+                {
+                    await FollowupAsync($"No question pool found for {testName.ToUpper()}. Use `/import {testName}` first.", ephemeral: true);
+                    return;
+                }
+
+                // Validate that the pool has questions
+                var questionCount = await db.Questions.CountAsync(q => q.Test.TestId == selectedPool.TestId && !q.IsArchived);
+                if (questionCount == 0)
+                {
+                    await FollowupAsync($"No questions found in the {testName.ToUpper()} pool. The pool may need to be imported.", ephemeral: true);
+                    return;
+                }
+
+                ulong id = Context.User.Id; // Private mode uses user ID
+
+                // Create QuizUtil instance for private mode
+                var startQuiz = new QuizUtil(
+                    user: Context.User as IUser,
+                    services: _services,
+                    guild: Context.Guild as IGuild,
+                    id: id
+                );
+                startQuiz.SetQuizMode(DefaultMode);
+
+                // Use ConcurrentDictionary.TryAdd as the atomic gate
+                if (!_hamTestService.RunningTests.TryAdd(id, startQuiz))
+                {
+                    await FollowupAsync("You already have an active quiz! Use `/quiz stop` to end it first.", ephemeral: true);
+                    return;
+                }
+
+                // We now "own" this slot - create DB record and start quiz
+                try
+                {
+                    var quiz = new Quiz
+                    {
+                        ServerId = id,
+                        IsActive = true,
+                        TimeStarted = DateTime.UtcNow,
+                        StartedById = Context.User.Id,
+                        StartedByName = Context.User.Username,
+                        StartedByIconUrl = Context.User.GetAvatarUrl()
+                    };
+                    await db.Quiz.AddAsync(quiz);
+                    await db.SaveChangesAsync();
+
+                    var poolInfo = $"{selectedPool.FromDate:yyyy-MM-dd} to {selectedPool.ToDate:yyyy-MM-dd}";
+                    await FollowupAsync($"Starting {testName.ToUpper()} practice exam [{poolInfo}] with {DefaultQuestions} questions. Answer using buttons!", ephemeral: true);
+
+                    await startQuiz.StartGame(quiz, DefaultQuestions, selectedPool.TestId, DefaultDelaySeconds * 1000).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // Failed after claiming slot - release it so user can try again
+                    _hamTestService.RunningTests.TryRemove(id, out _);
+                    throw;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in QuickStartTest for {License}", license);
+                try
+                {
+                    await FollowupAsync("An error occurred starting the quiz. Please try again.", ephemeral: true);
+                }
+                catch
+                {
+                    // Followup failed, nothing more we can do
+                }
+            }
+        }
     }
 
     [Group("quiz", "Ham radio license exam practice commands")]
@@ -179,205 +318,6 @@ namespace SevenThree.Modules
             }
         }
 
-        [SlashCommand("import", "Import question pool(s) from JSON (bot owner only)")]
-        [RequireOwner]
-        public async Task ImportQuestions(
-            [Summary("license", "License class to import")] LicenseType license)
-        {
-            await DeferAsync(ephemeral: true);
-
-            using var db = _contextFactory.CreateDbContext();
-            var testName = license.ToString().ToLower();
-            var testDesc = $"U.S. Ham Radio test for the {testName} class license.";
-
-            try
-            {
-                var importDir = $"import/{testName}";
-                if (!Directory.Exists(importDir))
-                {
-                    await FollowupAsync($"Import directory not found: {importDir}");
-                    return;
-                }
-
-                var importResults = new List<string>();
-                var totalFiguresImported = 0;
-
-                // Check for dated subfolders (e.g., "2022-2026", "2026-2030")
-                var subDirs = Directory.GetDirectories(importDir)
-                    .Where(d => Path.GetFileName(d).Contains('-'))
-                    .ToList();
-
-                if (subDirs.Count > 0)
-                {
-                    // Process each subfolder as a separate pool with its own figures
-                    foreach (var subDir in subDirs)
-                    {
-                        var result = await ImportPoolFromDirectory(db, testName, testDesc, subDir);
-                        importResults.Add(result.Message);
-                        totalFiguresImported += result.FiguresImported;
-                    }
-                }
-                else
-                {
-                    // Flat structure (backwards compatible) - single pool
-                    var result = await ImportPoolFromDirectory(db, testName, testDesc, importDir);
-                    importResults.Add(result.Message);
-                    totalFiguresImported += result.FiguresImported;
-                }
-
-                if (importResults.Count == 0 || importResults.All(r => r.StartsWith("Skipped") || r.StartsWith("No ")))
-                {
-                    await FollowupAsync($"No valid import files found for {testName}!");
-                    return;
-                }
-
-                var summary = string.Join("\n", importResults);
-                await FollowupAsync($"Import complete for {testName.ToUpper()}:\n{summary}\nTotal figures: {totalFiguresImported}");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error importing questions");
-                await FollowupAsync($"Error importing {testName}: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Import a single test pool from a directory (subfolder or main folder)
-        /// </summary>
-        private async Task<(string Message, int FiguresImported)> ImportPoolFromDirectory(
-            SevenThreeContext db, string testName, string testDesc, string directory)
-        {
-            // Find JSON file in this directory
-            var jsonFiles = Directory.GetFiles(directory, $"{testName}_*.json");
-            if (jsonFiles.Length == 0)
-            {
-                return ($"No JSON file in {Path.GetFileName(directory)}", 0);
-            }
-
-            var curFile = jsonFiles[0]; // Use first JSON file found
-            var fileName = Path.GetFileNameWithoutExtension(curFile);
-            var fileNameParts = fileName.Split('_');
-
-            if (fileNameParts.Length < 3)
-            {
-                return ($"Skipped {fileName}: invalid format", 0);
-            }
-
-            if (!DateTime.TryParse(fileNameParts[1], out var parsedStartDate) ||
-                !DateTime.TryParse(fileNameParts[2], out var parsedEndDate))
-            {
-                return ($"Skipped {fileName}: could not parse dates", 0);
-            }
-
-            DateTime startDate = DateTime.SpecifyKind(parsedStartDate, DateTimeKind.Utc);
-            DateTime endDate = DateTime.SpecifyKind(parsedEndDate, DateTimeKind.Utc);
-
-            // Find existing test pool by TestName + date range
-            var test = await db.HamTest
-                .Where(t => t.TestName == testName && t.FromDate == startDate && t.ToDate == endDate)
-                .FirstOrDefaultAsync();
-
-            if (test == null)
-            {
-                // Create new test pool
-                test = new HamTest
-                {
-                    TestName = testName,
-                    TestDescription = testDesc,
-                    FromDate = startDate,
-                    ToDate = endDate
-                };
-                await db.AddAsync(test);
-                await db.SaveChangesAsync();
-            }
-            else
-            {
-                // Clear old items for THIS specific test pool only (order matters for FK constraints)
-                var userAnswers = await db.UserAnswer
-                    .Where(ua => ua.Question.Test.TestId == test.TestId)
-                    .ToListAsync();
-                db.RemoveRange(userAnswers);
-
-                var answers = await db.Answer
-                    .Where(a => a.Question.Test.TestId == test.TestId)
-                    .ToListAsync();
-                db.RemoveRange(answers);
-
-                var questions = await db.Questions
-                    .Where(q => q.Test.TestId == test.TestId)
-                    .ToListAsync();
-                db.RemoveRange(questions);
-
-                var figures = await db.Figure
-                    .Where(f => f.Test.TestId == test.TestId)
-                    .ToListAsync();
-                db.RemoveRange(figures);
-
-                await db.SaveChangesAsync();
-            }
-
-            // Import questions
-            var questionData = QuestionIngest.FromJson(await File.ReadAllTextAsync(curFile));
-
-            foreach (var item in questionData)
-            {
-                var newQuestion = new Questions
-                {
-                    QuestionText = item.Question,
-                    QuestionSection = item.QuestionId,
-                    FccPart = item.FccPart,
-                    SubelementDesc = item.SubelementDesc,
-                    FigureName = item.Figure,
-                    SubelementName = item.SubelementName?.ToString(),
-                    Test = test
-                };
-                db.Questions.Add(newQuestion);
-
-                var answerChar = item.AnswerKey.ToString()[0];
-                foreach (var answer in item.PossibleAnswer)
-                {
-                    var posAnswerChar = answer[0];
-                    var posAnswerText = answer.Length > 3 ? answer.Substring(3) : answer;
-
-                    db.Answer.Add(new Answer
-                    {
-                        Question = newQuestion,
-                        AnswerText = posAnswerText,
-                        IsAnswer = answerChar == posAnswerChar
-                    });
-                }
-            }
-
-            await db.SaveChangesAsync();
-
-            // Import figures from this directory - linked to THIS specific pool
-            var figureFiles = Directory.EnumerateFiles(directory, $"{testName}_*.png");
-            var figuresImported = 0;
-
-            foreach (var file in figureFiles)
-            {
-                var figureName = Path.GetFileNameWithoutExtension(file)
-                    .Replace($"{testName}_", "")
-                    .Trim();
-
-                var contents = await File.ReadAllBytesAsync(file);
-                db.Figure.Add(new Figure
-                {
-                    Test = test,
-                    FigureName = figureName,
-                    FigureImage = contents
-                });
-                figuresImported++;
-            }
-
-            if (figuresImported > 0)
-            {
-                await db.SaveChangesAsync();
-            }
-
-            return ($"{startDate:yyyy-MM-dd} to {endDate:yyyy-MM-dd}: {questionData.Count} questions, {figuresImported} figures", figuresImported);
-        }
-
         private async Task StartTest(LicenseType license, int? testId, int numQuestions, int questionDelay, QuizMode mode)
         {
             var isPrivate = mode == QuizMode.Private;
@@ -419,7 +359,7 @@ namespace SevenThree.Modules
 
                 if (selectedPool == null)
                 {
-                    await FollowupAsync($"No question pool found for {testName.ToUpper()}. Use `/quiz import {testName}` first.", ephemeral: isPrivate);
+                    await FollowupAsync($"No question pool found for {testName.ToUpper()}. Use `/import {testName}` first.", ephemeral: isPrivate);
                     return;
                 }
 
@@ -451,7 +391,7 @@ namespace SevenThree.Modules
                 ulong id = isPrivate ? Context.User.Id : GetId();
 
                 // Validate that the pool has questions before doing anything else
-                var questionCount = await db.Questions.CountAsync(q => q.Test.TestId == selectedPool.TestId);
+                var questionCount = await db.Questions.CountAsync(q => q.Test.TestId == selectedPool.TestId && !q.IsArchived);
                 if (questionCount == 0)
                 {
                     await FollowupAsync($"No questions found in the {testName.ToUpper()} pool. The pool may need to be imported.", ephemeral: isPrivate);

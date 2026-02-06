@@ -34,6 +34,18 @@ namespace SevenThree.Database
         {
         }
 
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+
+            // Unique index on (TestId, QuestionSection) for efficient upsert lookups
+            // This ensures no duplicate question sections within a pool
+            modelBuilder.Entity<Questions>()
+                .HasIndex("TestId", "QuestionSection")
+                .IsUnique()
+                .HasDatabaseName("IX_Questions_TestId_QuestionSection");
+        }
+
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             if (optionsBuilder.IsConfigured)

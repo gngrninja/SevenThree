@@ -108,15 +108,14 @@ namespace SevenThree.Modules
                 }
 
                 _tokenSource = new CancellationTokenSource();
-                var random = new Random();
-                CurrentQuestion = _questions[random.Next(_questions.Count)];
+                CurrentQuestion = _questions[Random.Shared.Next(_questions.Count)];
                 _questions.Remove(CurrentQuestion);
 
                 try
                 {
                     _questionsAsked.Add(CurrentQuestion);
                     var embed = GetQuestionEmbed();
-                    await SetupAnswers(random, embed);
+                    await SetupAnswers(embed);
 
                     // Await the question send to avoid race condition
                     bool hasFigure = !string.IsNullOrEmpty(CurrentQuestion.FigureName);
@@ -177,8 +176,8 @@ namespace SevenThree.Modules
 
         private async Task SendQuestionResultsAsync()
         {
-            var usersWon = await GetCorrectUsersFromQuestion();
-            var usersLost = await GetIncorrectUsersFromQuestion();
+            var usersWon = await GetUsersFromQuestion(isCorrect: true);
+            var usersLost = await GetUsersFromQuestion(isCorrect: false);
             var embed = await GetQuestionResultsEmbedAsync(usersWon, usersLost);
             await SendMessageAsync(embed);
         }
@@ -273,7 +272,7 @@ namespace SevenThree.Modules
             return embed;
         }
 
-        private async Task SetupAnswers(Random random, EmbedBuilder embed)
+        private async Task SetupAnswers(EmbedBuilder embed)
         {
             var answerOptions = new List<Tuple<char, Answer>>();
             var letters = new List<char> { 'A', 'B', 'C', 'D' };
@@ -290,7 +289,7 @@ namespace SevenThree.Modules
                 int randIndex;
                 do
                 {
-                    randIndex = random.Next(answers.Count);
+                    randIndex = Random.Shared.Next(answers.Count);
                 } while (usedIndices.Contains(randIndex));
 
                 usedIndices.Add(randIndex);
@@ -630,7 +629,14 @@ namespace SevenThree.Modules
             {
                 if (File.Exists(tempPath))
                 {
-                    try { File.Delete(tempPath); } catch { /* ignore cleanup errors */ }
+                    try
+                    {
+                        File.Delete(tempPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Failed to delete temp file {TempPath}", tempPath);
+                    }
                 }
             }
         }
@@ -705,20 +711,17 @@ namespace SevenThree.Modules
             return grouped.Select(x => Tuple.Create((ulong)x.UserId, x.Count)).ToList();
         }
 
-        private async Task<List<UserAnswer>> GetCorrectUsersFromQuestion()
+        /// <summary>
+        /// Gets user answers for the current question, filtered by correctness.
+        /// </summary>
+        private async Task<List<UserAnswer>> GetUsersFromQuestion(bool isCorrect)
         {
             using var db = _contextFactory.CreateDbContext();
-            var users = await db.UserAnswer.Where(u => u.Quiz.QuizId == Quiz.QuizId && u.Question.QuestionId == CurrentQuestion.QuestionId).ToListAsync();
-            users = users.Where(u => u.IsAnswer).ToList();
-            return users;
-        }
-
-        private async Task<List<UserAnswer>> GetIncorrectUsersFromQuestion()
-        {
-            using var db = _contextFactory.CreateDbContext();
-            var users = await db.UserAnswer.Where(u => u.Quiz.QuizId == Quiz.QuizId && u.Question.QuestionId == CurrentQuestion.QuestionId).ToListAsync();
-            users = users.Where(u => !u.IsAnswer).ToList();
-            return users;
+            return await db.UserAnswer
+                .Where(u => u.Quiz.QuizId == Quiz.QuizId
+                         && u.Question.QuestionId == CurrentQuestion.QuestionId
+                         && u.IsAnswer == isCorrect)
+                .ToListAsync();
         } 
 
         internal async Task StopQuiz()
@@ -806,7 +809,8 @@ namespace SevenThree.Modules
         {
             using var db = _contextFactory.CreateDbContext();
 
-            var query = db.Questions.Include(q => q.Test).Where(q => q.Test.TestId == testId);
+            var query = db.Questions.Include(q => q.Test)
+                .Where(q => q.Test.TestId == testId && !q.IsArchived);
             if (figuresOnly)
             {
                 query = query.Where(q => q.FigureName != null);
@@ -825,10 +829,9 @@ namespace SevenThree.Modules
             numQuestions = Math.Min(numQuestions, questions.Count);
 
             // Use Fisher-Yates shuffle for efficient random selection
-            var random = new Random();
             for (int i = questions.Count - 1; i > 0; i--)
             {
-                int j = random.Next(i + 1);
+                int j = Random.Shared.Next(i + 1);
                 (questions[i], questions[j]) = (questions[j], questions[i]);
             }
 

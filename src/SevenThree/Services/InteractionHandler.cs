@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using SevenThree.Constants;
 using SevenThree.Modules.PskReporter;
+using SevenThree.Modules.Study;
 using SevenThree.Services;
 
 namespace SevenThree.Services
@@ -21,6 +22,7 @@ namespace SevenThree.Services
         private readonly IConfiguration _config;
         private readonly QuizButtonHandler _quizButtonHandler;
         private readonly PskButtonHandler _pskButtonHandler;
+        private readonly StudyButtonHandler _studyButtonHandler;
 
         public InteractionHandler(
             DiscordSocketClient client,
@@ -29,7 +31,8 @@ namespace SevenThree.Services
             ILogger<InteractionHandler> logger,
             IConfiguration config,
             QuizButtonHandler quizButtonHandler,
-            PskButtonHandler pskButtonHandler)
+            PskButtonHandler pskButtonHandler,
+            StudyButtonHandler studyButtonHandler)
         {
             _client = client;
             _interactions = interactions;
@@ -38,6 +41,7 @@ namespace SevenThree.Services
             _config = config;
             _quizButtonHandler = quizButtonHandler;
             _pskButtonHandler = pskButtonHandler;
+            _studyButtonHandler = studyButtonHandler;
         }
 
         public async Task InitializeAsync()
@@ -156,6 +160,20 @@ namespace SevenThree.Services
                 if (component.Data.CustomId.StartsWith($"{PskReporterService.BUTTON_PREFIX}:"))
                 {
                     await _pskButtonHandler.HandlePskButtonAsync(component);
+                    return;
+                }
+
+                // Route study flashcard button clicks to StudyButtonHandler
+                if (component.Data.CustomId.StartsWith($"{StudyConstants.BUTTON_PREFIX}:"))
+                {
+                    await _studyButtonHandler.HandleStudyButtonAsync(component);
+                    return;
+                }
+
+                // Route study retry button clicks to StudyButtonHandler
+                if (component.Data.CustomId.StartsWith($"{StudyConstants.RETRY_BUTTON_PREFIX}:"))
+                {
+                    await _studyButtonHandler.HandleRetryButtonAsync(component);
                     return;
                 }
 

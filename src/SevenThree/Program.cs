@@ -14,6 +14,7 @@ using SevenThree.Database;
 using SevenThree.Modules;
 using SevenThree.Modules.BandConditions;
 using SevenThree.Modules.PskReporter;
+using SevenThree.Modules.Study;
 
 namespace SevenThree
 {
@@ -146,6 +147,8 @@ namespace SevenThree
                 .AddSingleton<HamTestService>()
                 .AddSingleton<QuizButtonHandler>()
                 .AddSingleton<PskButtonHandler>()
+                .AddSingleton<StudyService>()
+                .AddSingleton<StudyButtonHandler>()
                 .AddSingleton<ReactionService>()
                 .AddSingleton<BandConditions>()
                 .AddSingleton<PskReporterService>()
