@@ -1,99 +1,101 @@
 ![logo](https://github.com/gngrninja/SevenThree/blob/master/media/73.png?raw=true)
 
 # SevenThree
-SevenThree is a ham radio Discord bot. You can use SevenThree to lookup call signs, as well take practice tests with the technician, general, or extra class question pools!
 
-(Updated to reflect the new Extra class question pool that expires June 30th 2024!)
+SevenThree is a Discord bot for ham radio enthusiasts. Practice for your FCC Technician, General, or Extra license exams with gamified quizzes, review missed questions with study tools, check real-time propagation via PSKReporter, look up callsigns on QRZ, and view current band conditions — all from Discord.
 
-# Join the SevenThree Discord server!
-Come say hi, and take a test or two. This server will be the place to go for updates and help with SevenThree.
+## Join the SevenThree Discord Server
+
+Come say hi, take a practice test, or get help with the bot.
 https://discord.gg/EhvxYbx
 
-# Invite to your server
-If you'd like to try out the bot on your server, use this invite link: https://discordapp.com/oauth2/authorize?client_id=576992584602353684&scope=bot&permissions=52288
+## Invite to Your Server
 
-It will need permissions to read chat (so you can issue commands), post messages/embeds, add reactions, and upload images/files(for questions that have diagrams associated with them).
+Use this invite link to add SevenThree to your server: https://discord.com/oauth2/authorize?client_id=576992584602353684&scope=bot+applications.commands&permissions=52288
 
-# Help!
-### Start a gamified test in a Discord channel
-This example will start a test for the tech class license with 4 questions.
-If you do not specify the number of questions, it will default to 35.
+The bot needs the `applications.commands` scope for slash commands, plus permissions to read messages, send messages/embeds, and upload files (for question diagrams).
 
-```
-+start tech 4
-```
+## Features
 
-![start](https://github.com/gngrninja/SevenThree/blob/master/media/quiz_start.png?raw=true)
+### Exams
 
-### Test starting shortcuts
-You can start a test with the defaults by using either:
+Start a practice exam with quick shortcuts or customize your session.
 
-```
-+tech
-```
-or
-```
-+general
-```
-or
-```
-+extra
-```
+| Command | Description |
+|---|---|
+| `/tech` | Quick start a Technician exam with defaults |
+| `/general` | Quick start a General exam with defaults |
+| `/extra` | Quick start an Extra exam with defaults |
+| `/quiz tech\|general\|extra` | Start an exam with options for pool, question count, delay, and mode |
+| `/quiz start` | Start an exam by selecting a license type |
+| `/quiz stop` | Stop the current exam |
 
-![tech](https://github.com/gngrninja/SevenThree/blob/master/media/tech_short.png?raw=true)
+- **Private mode** (default) — questions are sent via DM so only you see them
+- **Public mode** — questions are posted to the channel for group participation
+- **Multiple question pools** — choose a specific pool (current, upcoming, or expired) or let it default to the current pool
+- **Button-based answering** — tap A, B, C, or D to answer; buttons color-code after answering (green = correct, red = incorrect)
 
-Guessing is simple, just tap or click the appropriate letter! If everyone that has guessed during the test clicks the skip icon, it will proceed to the next question.
+### Study & Review
 
-### Start a test with 10 questions lasting 15 seconds
+Review and strengthen weak areas after taking practice exams.
 
-```
-+start general 10 15
-```
+| Command | Description |
+|---|---|
+| `/study missed` | Flashcard review of questions you answered incorrectly |
+| `/study weak` | Focus on questions you've missed multiple times |
+| `/study retry` | Re-quiz yourself on missed questions |
+| `/study stats` | View your performance statistics by topic |
 
-![1015](https://github.com/gngrninja/SevenThree/blob/master/media/gen_1015.png?raw=true)
+All study commands support optional filtering by license type, question pool, and subelement.
 
-### Start a private test (direct messaged to you) for the extra class license, with 20 questions
+### PSK Reporter
 
-For this you can either direct message the bot:
-```
-+start extra 20
-```
-Or if you're in a Discord server's channel, use (will start a private test with 20 questions, with 25 seconds between questions):
-```
-+start extra 20 25 private
-```
+Real-time propagation and spot data from PSKReporter, with paginated results.
 
-![startpriv](https://github.com/gngrninja/SevenThree/blob/master/media/priv_start.png?raw=true)
-![startpriv](https://github.com/gngrninja/SevenThree/blob/master/media/priv_start2.png?raw=true)
+| Command | Description |
+|---|---|
+| `/psk spots <callsign>` | Who is hearing a callsign |
+| `/psk hearing <callsign>` | What a callsign is hearing |
+| `/psk propagation <callsign>` | Propagation statistics (bands, countries, modes, best DX) |
+| `/psk band <band> [mode]` | Activity on a specific band |
+| `/psk grid <grid>` | Spots from a Maidenhead grid square |
 
-When you guess wrong on a private test, it will proceed to the next question, as well as tell you which answer was correct.
+### QRZ Lookup
 
-![privwrong](https://github.com/gngrninja/SevenThree/blob/master/media/priv_wrong.png?raw=true)
+| Command | Description |
+|---|---|
+| `/qrz lookup <callsign>` | Look up a callsign on QRZ.com |
+| `/qrz dxcc <entity>` | Look up DXCC entity information |
 
-### Stop a test
-```
-+stop
-```
+### Callsign
 
-![stopcmd](https://github.com/gngrninja/SevenThree/blob/master/media/stop_cmd.png?raw=true)
+| Command | Description |
+|---|---|
+| `/callsign set <callsign>` | Associate your callsign with your Discord account |
+| `/callsign get` | View your associated callsign |
 
-### Lookup a callsign
-```
-+lookup <callsign>
-```
+### Band Conditions
 
-This command will lookup information from QRZ, and present it in Discord. If they have a profile image, it will be shown in the embed.
+| Command | Description |
+|---|---|
+| `/conditions` | View current HF band conditions |
 
-![lookup](https://github.com/gngrninja/SevenThree/blob/master/media/lookup_call.png?raw=true)
+### Help
 
-### Change command prefix
-If you would like to change the prefix for this bot's commands, use:
+| Command | Description |
+|---|---|
+| `/help` | Interactive help with a category dropdown menu |
 
-```
-+prefix .
-```
+### Server Settings
 
-After using this command, be sure to remember the prefix you changed it to!
+Server administrators can configure quiz behavior per channel.
 
-# Issues / Feedback?
-Feel free to open up an issue against this repository, or ask on the Discord server, here: https://discord.gg/EhvxYbx.
+| Command | Description |
+|---|---|
+| `/quizsettings setchannel <license>` | Restrict a channel to a specific license type |
+| `/quizsettings unsetchannel` | Remove channel restriction |
+| `/quizsettings clearafter` | Toggle clearing messages after a quiz ends |
+
+## Issues / Feedback
+
+Feel free to open an issue against this repository, or ask on the Discord server: https://discord.gg/EhvxYbx

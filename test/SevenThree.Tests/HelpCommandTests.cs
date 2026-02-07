@@ -8,20 +8,20 @@ namespace SevenThree.Tests
         #region CategorizeCommand Tests
 
         [Theory]
-        [InlineData("tech", "QuickStartSlashCommands", "Quick Start")]
-        [InlineData("general", "QuickStartSlashCommands", "Quick Start")]
-        [InlineData("extra", "QuickStartSlashCommands", "Quick Start")]
-        public void CategorizeCommand_QuickStartCommands_ReturnsQuickStart(string commandName, string moduleName, string expected)
+        [InlineData("tech", "QuickStartSlashCommands", "Exams")]
+        [InlineData("general", "QuickStartSlashCommands", "Exams")]
+        [InlineData("extra", "QuickStartSlashCommands", "Exams")]
+        public void CategorizeCommand_QuickStartCommands_ReturnsExams(string commandName, string moduleName, string expected)
         {
             var result = HelpSlashCommands.CategorizeCommand(commandName, moduleName);
             Assert.Equal(expected, result);
         }
 
         [Fact]
-        public void CategorizeCommand_QuizModule_ReturnsPracticeExams()
+        public void CategorizeCommand_QuizModule_ReturnsExams()
         {
             var result = HelpSlashCommands.CategorizeCommand("start", "quiz");
-            Assert.Equal("Practice Exams", result);
+            Assert.Equal("Exams", result);
         }
 
         [Fact]
@@ -83,11 +83,11 @@ namespace SevenThree.Tests
         }
 
         [Fact]
-        public void CategorizeCommand_TechWithNonQuickStartModule_ReturnsPracticeExams()
+        public void CategorizeCommand_TechWithNonQuickStartModule_ReturnsExams()
         {
-            // "tech" command name but in the "quiz" module should be Practice Exams, not Quick Start
+            // "tech" command name but in the "quiz" module should be Exams
             var result = HelpSlashCommands.CategorizeCommand("tech", "quiz");
-            Assert.Equal("Practice Exams", result);
+            Assert.Equal("Exams", result);
         }
 
         #endregion

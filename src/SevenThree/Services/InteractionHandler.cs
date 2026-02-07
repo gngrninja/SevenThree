@@ -7,6 +7,7 @@ using Discord.WebSocket;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using SevenThree.Constants;
+using SevenThree.Modules.Help;
 using SevenThree.Modules.PskReporter;
 using SevenThree.Modules.Study;
 using SevenThree.Services;
@@ -23,6 +24,7 @@ namespace SevenThree.Services
         private readonly QuizButtonHandler _quizButtonHandler;
         private readonly PskButtonHandler _pskButtonHandler;
         private readonly StudyButtonHandler _studyButtonHandler;
+        private readonly HelpSelectMenuHandler _helpSelectMenuHandler;
 
         public InteractionHandler(
             DiscordSocketClient client,
@@ -32,7 +34,8 @@ namespace SevenThree.Services
             IConfiguration config,
             QuizButtonHandler quizButtonHandler,
             PskButtonHandler pskButtonHandler,
-            StudyButtonHandler studyButtonHandler)
+            StudyButtonHandler studyButtonHandler,
+            HelpSelectMenuHandler helpSelectMenuHandler)
         {
             _client = client;
             _interactions = interactions;
@@ -42,6 +45,7 @@ namespace SevenThree.Services
             _quizButtonHandler = quizButtonHandler;
             _pskButtonHandler = pskButtonHandler;
             _studyButtonHandler = studyButtonHandler;
+            _helpSelectMenuHandler = helpSelectMenuHandler;
         }
 
         public async Task InitializeAsync()
@@ -54,6 +58,9 @@ namespace SevenThree.Services
 
             // Handle button clicks for quiz answers
             _client.ButtonExecuted += HandleButtonExecutedAsync;
+
+            // Handle select menu interactions
+            _client.SelectMenuExecuted += HandleSelectMenuExecutedAsync;
 
             // Handle post-execution for logging
             _interactions.SlashCommandExecuted += SlashCommandExecutedAsync;
@@ -202,6 +209,40 @@ namespace SevenThree.Services
                 {
                     // Failed to respond - interaction likely expired, nothing more we can do
                 }
+            }
+        }
+
+        private async Task HandleSelectMenuExecutedAsync(SocketMessageComponent component)
+        {
+            try
+            {
+                if (component.Data.CustomId == HelpSelectMenuHandler.SELECT_MENU_ID)
+                {
+                    await _helpSelectMenuHandler.HandleSelectionAsync(component);
+                    return;
+                }
+
+                // Unknown select menu - acknowledge but do nothing
+                if (!component.HasResponded)
+                {
+                    await component.DeferAsync();
+                }
+            }
+            catch (Discord.Net.HttpException ex) when (ex.DiscordCode == Discord.DiscordErrorCode.UnknownInteraction)
+            {
+                _logger.LogWarning("Select menu interaction expired before we could respond");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Exception handling select menu interaction");
+                try
+                {
+                    if (!component.HasResponded)
+                    {
+                        await component.RespondAsync("An error occurred.", ephemeral: true);
+                    }
+                }
+                catch { }
             }
         }
     }

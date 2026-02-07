@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging;
 using SevenThree.Database;
 using SevenThree.Modules;
 using SevenThree.Modules.BandConditions;
+using SevenThree.Modules.Help;
 using SevenThree.Modules.PskReporter;
 using SevenThree.Modules.Study;
 
@@ -149,6 +150,7 @@ namespace SevenThree
                 .AddSingleton<PskButtonHandler>()
                 .AddSingleton<StudyService>()
                 .AddSingleton<StudyButtonHandler>()
+                .AddSingleton<HelpSelectMenuHandler>()
                 .AddSingleton<ReactionService>()
                 .AddSingleton<BandConditions>()
                 .AddSingleton<PskReporterService>()

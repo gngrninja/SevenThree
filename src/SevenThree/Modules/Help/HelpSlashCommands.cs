@@ -6,6 +6,7 @@ using Discord;
 using Discord.Interactions;
 using Microsoft.Extensions.DependencyInjection;
 using SevenThree.Constants;
+using SevenThree.Modules.Help;
 
 namespace SevenThree.Modules
 {
@@ -18,110 +19,132 @@ namespace SevenThree.Modules
             _interactions = services.GetRequiredService<InteractionService>();
         }
 
+        private static readonly List<CategoryDefinition> Categories = new()
+        {
+            new("exams", "Exams", "Practice exams, quick start shortcuts, and quiz management", "📝"),
+            new("study", "Study & Review", "Review missed questions and study weak areas", "📚"),
+            new("qrz", "QRZ Lookup", "Look up callsign information via QRZ", "🔍"),
+            new("psk", "PSK Reporter", "Propagation spots, band activity, and grid lookups", "📡"),
+            new("callsign", "Callsign", "Associate your callsign with your Discord account", "📛"),
+            new("conditions", "Band Conditions", "Check current band conditions", "🌐"),
+            new("settings", "Server Settings", "Server-specific quiz settings", "⚙️"),
+            new("admin", "Admin", "Bot owner commands", "🔒"),
+            new("other", "Other", "Other commands", "❓"),
+        };
+
         [SlashCommand("help", "Get help with SevenThree bot commands")]
         public async Task GetHelp()
         {
             await DeferAsync(ephemeral: true);
 
-            var embed = new EmbedBuilder();
-            embed.Title = "SevenThree Help";
-            embed.Description = "SevenThree is a Discord bot for ham radio enthusiasts. Here are the available commands:";
-            embed.WithColor(new Color(0, 255, 0));
-            embed.ThumbnailUrl = QuizConstants.BOT_THUMBNAIL_URL;
-
-            // Get all slash commands, excluding owner-only commands for non-owners
-            var isOwner = await IsOwnerAsync();
-            var commands = GetAvailableCommands(isOwner);
-
-            // Group commands by category
-            var categories = new Dictionary<string, List<(string Name, string Description)>>
-            {
-                ["Quick Start"] = new(),
-                ["Practice Exams"] = new(),
-                ["Study & Review"] = new(),
-                ["QRZ Lookup"] = new(),
-                ["PSK Reporter"] = new(),
-                ["Callsign"] = new(),
-                ["Band Conditions"] = new(),
-                ["Server Settings"] = new(),
-                ["Other"] = new(),
-                ["Admin"] = new()
-            };
-
-            foreach (var cmd in commands)
-            {
-                var category = CategorizeCommand(cmd.Name, cmd.ModuleName);
-                var displayName = FormatCommandName(cmd.Name, cmd.ModuleName);
-
-                if (categories.ContainsKey(category))
-                {
-                    categories[category].Add((displayName, cmd.Description));
-                }
-            }
-
-            // Add non-empty categories to embed
-            foreach (var (category, cmds) in categories)
-            {
-                if (cmds.Count == 0) continue;
-
-                // Skip admin category for non-owners
-                if (category == "Admin" && !isOwner) continue;
-
-                var value = string.Join("\n", cmds.Select(c => $"`{c.Name}` - {c.Description}"));
-                embed.AddField(category, value, false);
-            }
-
-            embed.WithAuthor(new EmbedAuthorBuilder
-            {
-                Name = $"Help requested by: [{Context.User.Username}]",
-                IconUrl = Context.User.GetAvatarUrl()
-            });
-
-            embed.WithFooter(new EmbedFooterBuilder
-            {
-                Text = "SevenThree, your local ham radio Discord bot. 73!",
-                IconUrl = QuizConstants.BOT_THUMBNAIL_URL
-            });
-
-            await FollowupAsync(embed: embed.Build());
-        }
-
-        private async Task<bool> IsOwnerAsync()
-        {
             try
             {
-                var appInfo = await Context.Client.GetApplicationInfoAsync();
-                // Check both direct owner and team members if it's a team-owned app
-                if (appInfo.Owner?.Id == Context.User.Id)
-                    return true;
+                var isOwner = await IsOwnerAsync();
+                var commands = GetAvailableCommands(_interactions, isOwner);
 
-                if (appInfo.Team != null)
-                {
-                    return appInfo.Team.TeamMembers.Any(m => m.User.Id == Context.User.Id);
-                }
+                var embed = BuildWelcomeEmbed();
+                var menu = BuildCategorySelectMenu(commands, isOwner);
 
-                return false;
+                await FollowupAsync(embed: embed.Build(), components: menu, ephemeral: true);
             }
-            catch
+            catch (Exception)
             {
-                // If we can't determine ownership, default to not showing admin commands
-                return false;
+                await FollowupAsync("An error occurred loading help.", ephemeral: true);
             }
         }
 
-        private List<CommandInfo> GetAvailableCommands(bool includeOwnerOnly)
+        public static EmbedBuilder BuildWelcomeEmbed()
+        {
+            var embed = new EmbedBuilder();
+            embed.Title = "SevenThree Help";
+            embed.Description = "SevenThree is a Discord bot for ham radio enthusiasts.\n\n" +
+                "Select a category below to view available commands.";
+            embed.WithColor(new Color(0, 255, 0));
+            embed.ThumbnailUrl = QuizConstants.BOT_THUMBNAIL_URL;
+            embed.WithFooter("SevenThree, your local ham radio Discord bot. 73!");
+
+            return embed;
+        }
+
+        public static EmbedBuilder BuildCategoryEmbed(string categoryId, List<CommandInfo> commands)
+        {
+            var catDef = Categories.FirstOrDefault(c => c.Id == categoryId);
+            if (catDef == null)
+                return BuildWelcomeEmbed();
+
+            var categoryName = CatIdToCategory(categoryId);
+            var catCommands = commands
+                .Where(c => CategorizeCommand(c.Name, c.ModuleName) == categoryName)
+                .ToList();
+
+            var embed = new EmbedBuilder();
+            embed.Title = $"{catDef.Emoji} {catDef.Name}";
+            embed.WithColor(categoryId == "admin" ? new Color(255, 100, 100) : new Color(0, 255, 0));
+            embed.ThumbnailUrl = QuizConstants.BOT_THUMBNAIL_URL;
+
+            if (catCommands.Count == 0)
+            {
+                embed.Description = "No commands available in this category.";
+                return embed;
+            }
+
+            foreach (var cmd in catCommands.Take(25))
+            {
+                var displayName = FormatCommandName(cmd.Name, cmd.ModuleName);
+                embed.AddField($"`{displayName}`", cmd.Description, inline: false);
+            }
+
+            embed.WithFooter($"{catCommands.Count} command{(catCommands.Count != 1 ? "s" : "")} | SevenThree 73!");
+
+            return embed;
+        }
+
+        public static MessageComponent BuildCategorySelectMenu(List<CommandInfo> commands, bool isOwner)
+        {
+            var builder = new ComponentBuilder();
+            var selectMenu = new SelectMenuBuilder()
+                .WithPlaceholder("Select a command category...")
+                .WithCustomId(HelpSelectMenuHandler.SELECT_MENU_ID)
+                .WithMinValues(1)
+                .WithMaxValues(1);
+
+            selectMenu.AddOption("Home", "welcome", "Return to help home", new Emoji("🏠"));
+
+            foreach (var catDef in Categories)
+            {
+                if (catDef.Id == "admin" && !isOwner) continue;
+
+                var categoryName = CatIdToCategory(catDef.Id);
+                var count = commands.Count(c => CategorizeCommand(c.Name, c.ModuleName) == categoryName);
+                if (count == 0) continue;
+
+                var description = catDef.Description;
+                if (description.Length > 100)
+                    description = description[..97] + "...";
+
+                selectMenu.AddOption(
+                    label: $"{catDef.Emoji} {catDef.Name}",
+                    value: catDef.Id,
+                    description: description);
+            }
+
+            builder.WithSelectMenu(selectMenu);
+            return builder.Build();
+        }
+
+        #region Command Scanning
+
+        public static List<CommandInfo> GetAvailableCommands(InteractionService interactions, bool includeOwnerOnly)
         {
             var result = new List<CommandInfo>();
 
-            foreach (var module in _interactions.Modules)
+            foreach (var module in interactions.Modules)
             {
-                // Get the group prefix if this is a grouped module
                 var groupAttr = module.Attributes.OfType<GroupAttribute>().FirstOrDefault();
                 var groupPrefix = groupAttr?.Name;
 
                 foreach (var cmd in module.SlashCommands)
                 {
-                    // Check if command is owner-only
                     var isOwnerOnly = cmd.Preconditions.Any(p => p is RequireOwnerAttribute) ||
                                       module.Preconditions.Any(p => p is RequireOwnerAttribute);
 
@@ -135,8 +158,6 @@ namespace SevenThree.Modules
                         ModuleName = groupPrefix ?? module.Name,
                         GroupPrefix = groupPrefix,
                         IsOwnerOnly = isOwnerOnly,
-                        RequiresPermissions = cmd.Preconditions.Any(p => p is RequireUserPermissionAttribute) ||
-                                              module.Preconditions.Any(p => p is RequireUserPermissionAttribute)
                     });
                 }
             }
@@ -144,41 +165,36 @@ namespace SevenThree.Modules
             return result;
         }
 
+        #endregion
+
+        #region Categorization
+
         internal static string CategorizeCommand(string commandName, string moduleName)
         {
-            // Quick start commands (top-level /tech, /general, /extra)
             if (commandName is "tech" or "general" or "extra" && moduleName == "QuickStartSlashCommands")
-                return "Quick Start";
+                return "Exams";
 
-            // Quiz commands
             if (moduleName == "quiz")
-                return "Practice Exams";
+                return "Exams";
 
-            // Study commands
             if (moduleName == "study")
                 return "Study & Review";
 
-            // QRZ commands
             if (moduleName == "qrz")
                 return "QRZ Lookup";
 
-            // PSK commands
             if (moduleName == "psk")
                 return "PSK Reporter";
 
-            // Callsign commands
             if (moduleName == "callsign")
                 return "Callsign";
 
-            // Conditions
             if (commandName == "conditions")
                 return "Band Conditions";
 
-            // Server settings
             if (moduleName == "quizsettings")
                 return "Server Settings";
 
-            // Admin commands (owner-only or with special permissions)
             if (commandName is "import" or "playing")
                 return "Admin";
 
@@ -187,7 +203,6 @@ namespace SevenThree.Modules
 
         internal static string FormatCommandName(string commandName, string moduleName)
         {
-            // Check if this is part of a command group
             if (moduleName is "quiz" or "qrz" or "psk" or "callsign" or "quizsettings" or "study")
             {
                 return $"/{moduleName} {commandName}";
@@ -196,14 +211,62 @@ namespace SevenThree.Modules
             return $"/{commandName}";
         }
 
-        private class CommandInfo
+        /// <summary>
+        /// Maps a category dropdown ID back to the category name used by CategorizeCommand
+        /// </summary>
+        private static string CatIdToCategory(string catId)
+        {
+            return catId switch
+            {
+                "exams" => "Exams",
+                "study" => "Study & Review",
+                "qrz" => "QRZ Lookup",
+                "psk" => "PSK Reporter",
+                "callsign" => "Callsign",
+                "conditions" => "Band Conditions",
+                "settings" => "Server Settings",
+                "admin" => "Admin",
+                "other" => "Other",
+                _ => "Other"
+            };
+        }
+
+        #endregion
+
+        #region Helpers
+
+        private async Task<bool> IsOwnerAsync()
+        {
+            try
+            {
+                var appInfo = await Context.Client.GetApplicationInfoAsync();
+                if (appInfo.Owner?.Id == Context.User.Id)
+                    return true;
+
+                if (appInfo.Team != null)
+                {
+                    return appInfo.Team.TeamMembers.Any(m => m.User.Id == Context.User.Id);
+                }
+
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        #endregion
+
+        public class CommandInfo
         {
             public string Name { get; set; }
             public string Description { get; set; }
             public string ModuleName { get; set; }
             public string GroupPrefix { get; set; }
             public bool IsOwnerOnly { get; set; }
-            public bool RequiresPermissions { get; set; }
         }
+
+        private record CategoryDefinition(string Id, string Name, string Description, string Emoji);
     }
 }
