@@ -2,7 +2,7 @@
 
 # SevenThree
 
-SevenThree is a Discord bot for ham radio enthusiasts. Practice for your FCC Technician, General, or Extra license exams with gamified quizzes, review missed questions with study tools, check real-time propagation via PSKReporter, look up callsigns on QRZ, and view current band conditions — all from Discord.
+I've updated SevenThree to use slash commands now. Below you can find a summary of commands. Some of the testing commands have been simplified. There are also some new commands to query PSKReporter, study from your missed questions/sub elements, and more!
 
 ## Join the SevenThree Discord Server
 
@@ -15,7 +15,7 @@ Use this invite link to add SevenThree to your server: https://discord.com/oauth
 
 The bot needs the `applications.commands` scope for slash commands, plus permissions to read messages, send messages/embeds, and upload files (for question diagrams).
 
-## Features
+## Slash Commands
 
 ### Exams
 
