@@ -151,7 +151,7 @@ namespace SevenThree.Modules
             }
         }
 
-        private Embed BuildCallEmbed(string callsign, Models.QrzApiXml.QRZDatabase result, IUser user)
+        internal static Embed BuildCallEmbed(string callsign, Models.QrzApiXml.QRZDatabase result, IUser user)
         {
             var embed = new EmbedBuilder();
 

@@ -234,6 +234,28 @@ namespace SevenThree.Services
             return await FetchAndParseAsync(url);
         }
 
+        /// <summary>
+        /// Get reception reports from a Maidenhead grid square (who's transmitting from that grid)
+        /// </summary>
+        public async Task<PskReporterXml.ReceptionReports> GetGridSpotsAsync(
+            string grid,
+            ulong userId,
+            int limitMinutes = 60,
+            int maxReports = 100)
+        {
+            _userCooldowns[userId] = DateTime.UtcNow;
+
+            var flowStartSeconds = -limitMinutes * 60;
+            var url = $"{BASE_URL}?senderCallsign={Uri.EscapeDataString(grid)}" +
+                      $"&modify=grid" +
+                      $"&flowStartSeconds={flowStartSeconds}" +
+                      $"&rronly=1" +
+                      $"&rptlimit={maxReports}" +
+                      $"&appcontact={APP_CONTACT}";
+
+            return await FetchAndParseAsync(url);
+        }
+
         private async Task<PskReporterXml.ReceptionReports> FetchAndParseAsync(string url)
         {
             // Global rate limiting with async wait

@@ -160,7 +160,7 @@ namespace SevenThree.Modules
             return result;
         }
 
-        private static QrzApiXml.QRZDatabase ConvertResultToXml(string result)
+        internal static QrzApiXml.QRZDatabase ConvertResultToXml(string result)
         {
             if (string.IsNullOrEmpty(result))
             {

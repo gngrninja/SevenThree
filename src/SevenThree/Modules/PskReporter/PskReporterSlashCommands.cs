@@ -239,6 +239,59 @@ namespace SevenThree.Modules.PskReporter
             }
         }
 
+        [SlashCommand("grid", "Show spots from a Maidenhead grid square")]
+        public async Task GetGridSpots(
+            [Summary("grid", "Maidenhead grid square (e.g., EN37, FN42hn)")] string grid,
+            [Summary("minutes", "Time window in minutes (default: 60, max: 360)")] int minutes = 60)
+        {
+            await DeferAsync();
+
+            try
+            {
+                if (_pskService.IsOnCooldown(Context.User.Id, out var remaining))
+                {
+                    await FollowupAsync(
+                        $"Please wait {remaining.TotalSeconds:F0} seconds before making another PSKReporter request.");
+                    return;
+                }
+
+                grid = grid.ToUpperInvariant().Trim();
+
+                if (PskReporterService.GridToLatLon(grid) == null)
+                {
+                    await FollowupAsync(
+                        $"Invalid grid square: **{grid}**. Please provide a valid Maidenhead grid (e.g., EN37, FN42hn).");
+                    return;
+                }
+
+                minutes = Math.Clamp(minutes, 5, 360);
+
+                var reports = await _pskService.GetGridSpotsAsync(grid, Context.User.Id, minutes, 500);
+                var spots = _pskService.ConvertToSpotInfo(reports);
+
+                var cached = new PskReporterService.CachedSpotResult
+                {
+                    Spots = spots,
+                    Title = $"Grid Activity: {grid}",
+                    QueryType = "grid",
+                    Callsign = grid,
+                    Minutes = minutes,
+                    UserId = Context.User.Id
+                };
+                var sessionId = _pskService.CacheSpots(cached);
+
+                var embed = BuildPaginatedEmbed(cached, 0);
+                var components = BuildNavigationButtons(sessionId, 0, cached.TotalPages);
+
+                await FollowupAsync(embed: embed, components: components);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching grid spots for {Grid}", grid);
+                await FollowupAsync($"Error fetching spots for grid {grid}. Please try again later.");
+            }
+        }
+
         /// <summary>
         /// Build a paginated embed for spots
         /// </summary>
@@ -249,6 +302,7 @@ namespace SevenThree.Modules.PskReporter
                 "spots" => new Color(0, 150, 255),
                 "hearing" => new Color(0, 150, 255),
                 "band" => new Color(255, 165, 0),
+                "grid" => new Color(0, 200, 150),
                 _ => new Color(100, 100, 100)
             };
 
@@ -297,7 +351,7 @@ namespace SevenThree.Modules.PskReporter
                 {
                     sb.AppendLine($"**{spot.SenderCallsign}** -> {spot.ReceiverCallsign}{snr} - {timeAgo}");
                 }
-                else // spots
+                else // spots, grid
                 {
                     var country = !string.IsNullOrEmpty(spot.ReceiverDXCC) ? $" ({spot.ReceiverDXCC})" : "";
                     sb.AppendLine($"`{spot.Band,-4}` **{spot.ReceiverCallsign}**{country} {spot.Mode}{snr}{distance} - {timeAgo}");

@@ -41,17 +41,26 @@ namespace SevenThree.Tests
 
         /// <summary>
         /// Seeds a complete quiz scenario: test pool, questions with answers, a quiz, and user answers.
-        /// Returns (quizId, questionIds) for reference.
+        /// Returns (quizId, questionIds, testId) for reference.
         /// </summary>
         private async Task<(int QuizId, List<int> QuestionIds)> SeedQuizWithAnswers(
             ulong userId, int correctCount, int incorrectCount)
+        {
+            var result = await SeedQuizWithAnswers(userId, correctCount, incorrectCount, "tech", "T1", "FCC Rules");
+            return (result.QuizId, result.QuestionIds);
+        }
+
+        private async Task<(int QuizId, List<int> QuestionIds, int TestId)> SeedQuizWithAnswers(
+            ulong userId, int correctCount, int incorrectCount,
+            string testName, string subelementName, string subelementDesc,
+            DateTime? quizTime = null)
         {
             using var db = new SevenThreeContext(_dbOptions);
 
             var test = new HamTest
             {
-                TestName = "tech",
-                TestDescription = "Technician",
+                TestName = testName,
+                TestDescription = testName,
                 FromDate = DateTime.SpecifyKind(new DateTime(2022, 7, 1), DateTimeKind.Utc),
                 ToDate = DateTime.SpecifyKind(new DateTime(2026, 6, 30), DateTimeKind.Utc)
             };
@@ -62,8 +71,8 @@ namespace SevenThree.Tests
             {
                 ServerId = userId,
                 IsActive = false,
-                TimeStarted = DateTime.UtcNow.AddMinutes(-10),
-                TimeEnded = DateTime.UtcNow,
+                TimeStarted = quizTime ?? DateTime.UtcNow.AddMinutes(-10),
+                TimeEnded = (quizTime ?? DateTime.UtcNow.AddMinutes(-10)).AddMinutes(5),
                 StartedById = userId,
                 StartedByName = "TestUser"
             };
@@ -72,15 +81,16 @@ namespace SevenThree.Tests
 
             var questionIds = new List<int>();
             var total = correctCount + incorrectCount;
+            var sectionPrefix = subelementName + "A";
 
             for (int i = 0; i < total; i++)
             {
                 var question = new Questions
                 {
-                    QuestionText = $"Question {i + 1}?",
-                    QuestionSection = $"T1A{(i + 1):D2}",
-                    SubelementName = "T1",
-                    SubelementDesc = "FCC Rules",
+                    QuestionText = $"{testName} Question {i + 1}?",
+                    QuestionSection = $"{sectionPrefix}{(i + 1):D2}",
+                    SubelementName = subelementName,
+                    SubelementDesc = subelementDesc,
                     FccPart = "97",
                     Test = test
                 };
@@ -114,7 +124,7 @@ namespace SevenThree.Tests
             }
 
             await db.SaveChangesAsync();
-            return (quiz.QuizId, questionIds);
+            return (quiz.QuizId, questionIds, test.TestId);
         }
 
         #region Session Management Tests
@@ -530,6 +540,159 @@ namespace SevenThree.Tests
 
             // assert
             Assert.Empty(result);
+        }
+
+        #endregion
+
+        #region Filter Tests
+
+        [Fact]
+        public async Task GetMissedQuestionsAsync_WithTypeFilter_OnlyReturnsThatType()
+        {
+            // arrange - seed tech and general quizzes, each with 1 wrong
+            await SeedQuizWithAnswers(12345UL, 0, 2, "tech", "T1", "FCC Rules");
+            await SeedQuizWithAnswers(12345UL, 0, 1, "general", "G1", "Commission's Rules");
+
+            // act - filter to tech only
+            var filter = new StudyFilter { TestName = "tech" };
+            var result = await _sut.GetMissedQuestionsAsync(12345UL, StudyScope.All, filter);
+
+            // assert
+            Assert.Equal(2, result.Count);
+            Assert.True(result.All(q => q.TestName == "tech"));
+        }
+
+        [Fact]
+        public async Task GetMissedQuestionsAsync_WithPoolFilter_OnlyReturnsThatPool()
+        {
+            // arrange - two different test pools
+            var (_, _, testId1) = await SeedQuizWithAnswers(12345UL, 0, 2, "tech", "T1", "FCC Rules");
+            var (_, _, testId2) = await SeedQuizWithAnswers(12345UL, 0, 1, "tech", "T2", "Operating Procedures");
+
+            // act - filter to first pool only
+            var filter = new StudyFilter { TestId = testId1 };
+            var result = await _sut.GetMissedQuestionsAsync(12345UL, StudyScope.All, filter);
+
+            // assert
+            Assert.Equal(2, result.Count);
+        }
+
+        [Fact]
+        public async Task GetMissedQuestionsAsync_WithSubelementFilter_OnlyReturnsThatSubelement()
+        {
+            // arrange - seed with two subelements via separate quizzes
+            await SeedQuizWithAnswers(12345UL, 0, 2, "tech", "T1", "FCC Rules");
+            await SeedQuizWithAnswers(12345UL, 0, 3, "tech", "T2", "Operating Procedures");
+
+            // act - filter to T2 only
+            var filter = new StudyFilter { SubelementName = "T2" };
+            var result = await _sut.GetMissedQuestionsAsync(12345UL, StudyScope.All, filter);
+
+            // assert
+            Assert.Equal(3, result.Count);
+            Assert.True(result.All(q => q.SubelementName == "T2"));
+        }
+
+        [Fact]
+        public async Task GetMissedQuestionsAsync_ScopeLast_WithTypeFilter_FindsLastQuizOfThatType()
+        {
+            // arrange - tech quiz (older), then general quiz (newer), then another tech quiz (newest)
+            await SeedQuizWithAnswers(12345UL, 0, 1, "tech", "T1", "FCC Rules",
+                quizTime: DateTime.UtcNow.AddHours(-3));
+            await SeedQuizWithAnswers(12345UL, 0, 2, "general", "G1", "Commission's Rules",
+                quizTime: DateTime.UtcNow.AddHours(-2));
+            await SeedQuizWithAnswers(12345UL, 0, 3, "tech", "T2", "Operating Procedures",
+                quizTime: DateTime.UtcNow.AddHours(-1));
+
+            // act - "last quiz" filtered to tech should find the newest tech quiz (3 wrong), not the general
+            var filter = new StudyFilter { TestName = "tech" };
+            var result = await _sut.GetMissedQuestionsAsync(12345UL, StudyScope.Last, filter);
+
+            // assert - should get 3 missed from the most recent tech quiz
+            Assert.Equal(3, result.Count);
+            Assert.True(result.All(q => q.SubelementName == "T2"));
+        }
+
+        [Fact]
+        public async Task GetWeakQuestionsAsync_WithTypeFilter_OnlyReturnsThatType()
+        {
+            // arrange - miss tech and general questions twice each (both meet threshold)
+            await SeedQuizWithAnswers(12345UL, 0, 2, "tech", "T1", "FCC Rules",
+                quizTime: DateTime.UtcNow.AddHours(-4));
+            await SeedQuizWithAnswers(12345UL, 0, 1, "general", "G1", "Commission's Rules",
+                quizTime: DateTime.UtcNow.AddHours(-3));
+
+            // Miss all questions again in new quizzes so both types meet weak threshold
+            using var db = new SevenThreeContext(_dbOptions);
+            var allQuestions = await db.Questions.Include(q => q.Test).ToListAsync();
+
+            var quiz2 = new Quiz
+            {
+                ServerId = 12345UL, IsActive = false,
+                TimeStarted = DateTime.UtcNow.AddHours(-1), TimeEnded = DateTime.UtcNow,
+                StartedById = 12345UL, StartedByName = "TestUser"
+            };
+            db.Quiz.Add(quiz2);
+            await db.SaveChangesAsync();
+
+            foreach (var q in allQuestions)
+            {
+                db.UserAnswer.Add(new UserAnswer
+                {
+                    Quiz = quiz2, Question = q,
+                    UserId = 12345L, UserName = "TestUser",
+                    AnswerText = "B", IsAnswer = false
+                });
+            }
+            await db.SaveChangesAsync();
+
+            // verify unfiltered returns all 3 weak questions (2 tech + 1 general)
+            var unfiltered = await _sut.GetWeakQuestionsAsync(12345UL);
+            Assert.Equal(3, unfiltered.Count);
+
+            // act - weak filtered to tech
+            var filter = new StudyFilter { TestName = "tech" };
+            var result = await _sut.GetWeakQuestionsAsync(12345UL, filter);
+
+            // assert - only the 2 tech questions, general excluded by filter
+            Assert.Equal(2, result.Count);
+            Assert.True(result.All(q => q.TestName == "tech"));
+        }
+
+        [Fact]
+        public async Task GetUserStatsAsync_WithTypeFilter_RecalculatesOverallPercent()
+        {
+            // arrange - tech: 3 correct, 2 wrong = 60%
+            //           general: 0 correct, 3 wrong = 0%
+            //           unfiltered overall: 3/8 = 37.5%
+            await SeedQuizWithAnswers(12345UL, 3, 2, "tech", "T1", "FCC Rules");
+            await SeedQuizWithAnswers(12345UL, 0, 3, "general", "G1", "Commission's Rules");
+
+            // act - filter to tech only
+            var filter = new StudyFilter { TestName = "tech" };
+            var result = await _sut.GetUserStatsAsync(12345UL, filter);
+
+            // assert - should show tech-only stats: 60%
+            Assert.Equal(5, result.TotalAnswered);
+            Assert.Equal(3, result.TotalCorrect);
+            Assert.Equal(60.0, result.OverallPercent);
+        }
+
+        [Fact]
+        public async Task GetUserStatsAsync_WithFilters_ShowsOnlyMatchingSubelements()
+        {
+            // arrange - tech T1 and general G1
+            await SeedQuizWithAnswers(12345UL, 2, 1, "tech", "T1", "FCC Rules");
+            await SeedQuizWithAnswers(12345UL, 1, 2, "general", "G1", "Commission's Rules");
+
+            // act - filter to general
+            var filter = new StudyFilter { TestName = "general" };
+            var result = await _sut.GetUserStatsAsync(12345UL, filter);
+
+            // assert - only G1 subelement
+            Assert.Single(result.SubelementStats);
+            Assert.Equal("G1", result.SubelementStats[0].SubelementName);
+            Assert.Equal("general", result.SubelementStats[0].TestName);
         }
 
         #endregion

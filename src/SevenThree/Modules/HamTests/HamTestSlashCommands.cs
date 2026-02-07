@@ -446,7 +446,8 @@ namespace SevenThree.Modules
 
                     var poolInfo = $"{selectedPool.FromDate:yyyy-MM-dd} to {selectedPool.ToDate:yyyy-MM-dd}";
                     var delayNote = delayWasClamped ? $" (delay adjusted to {questionDelay}s)" : "";
-                    await FollowupAsync($"Starting {testName.ToUpper()} practice exam [{poolInfo}] with {numQuestions} questions. Answer using buttons!{delayNote}", ephemeral: isPrivate);
+                    var dmNote = isPrivate ? " Check your DMs." : "";
+                    await FollowupAsync($"Starting {testName.ToUpper()} practice exam [{poolInfo}] with {numQuestions} questions. Answer using buttons!{delayNote}{dmNote}", ephemeral: isPrivate);
 
                     await startQuiz.StartGame(quiz, numQuestions, selectedPool.TestId, questionDelay * 1000).ConfigureAwait(false);
                 }

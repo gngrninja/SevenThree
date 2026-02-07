@@ -144,7 +144,7 @@ namespace SevenThree.Modules
             return result;
         }
 
-        private string CategorizeCommand(string commandName, string moduleName)
+        internal static string CategorizeCommand(string commandName, string moduleName)
         {
             // Quick start commands (top-level /tech, /general, /extra)
             if (commandName is "tech" or "general" or "extra" && moduleName == "QuickStartSlashCommands")
@@ -185,7 +185,7 @@ namespace SevenThree.Modules
             return "Other";
         }
 
-        private string FormatCommandName(string commandName, string moduleName)
+        internal static string FormatCommandName(string commandName, string moduleName)
         {
             // Check if this is part of a command group
             if (moduleName is "quiz" or "qrz" or "psk" or "callsign" or "quizsettings" or "study")

@@ -9,6 +9,27 @@ namespace SevenThree.Models
         All
     }
 
+    public class StudyFilter
+    {
+        public string TestName { get; set; }       // "tech", "general", "extra"
+        public int? TestId { get; set; }           // HamTest.TestId (specific pool)
+        public string SubelementName { get; set; } // "T1", "G3", etc.
+
+        public bool HasFilters => TestName != null || TestId != null || SubelementName != null;
+
+        public string GetFilterDescription()
+        {
+            var parts = new List<string>();
+            if (TestName != null)
+                parts.Add($"Type: {TestName.ToUpper()}");
+            if (TestId != null)
+                parts.Add($"Pool: #{TestId}");
+            if (SubelementName != null)
+                parts.Add($"Subelement: {SubelementName}");
+            return string.Join(" | ", parts);
+        }
+    }
+
     public class MissedQuestion
     {
         public int QuestionId { get; set; }

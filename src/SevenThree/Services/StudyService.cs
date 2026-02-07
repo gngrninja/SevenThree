@@ -30,7 +30,7 @@ namespace SevenThree.Services
         /// <summary>
         /// Get questions the user answered incorrectly
         /// </summary>
-        public async Task<List<MissedQuestion>> GetMissedQuestionsAsync(ulong userId, StudyScope scope)
+        public async Task<List<MissedQuestion>> GetMissedQuestionsAsync(ulong userId, StudyScope scope, StudyFilter filter = null)
         {
             using var db = _contextFactory.CreateDbContext();
 
@@ -39,11 +39,19 @@ namespace SevenThree.Services
                     .ThenInclude(q => q.Test)
                 .Where(ua => ua.UserId == (long)userId && !ua.IsAnswer);
 
+            query = ApplyFilters(query, filter);
+
             if (scope == StudyScope.Last)
             {
-                // Get the user's most recent quiz
-                var lastQuizId = await db.UserAnswer
-                    .Where(ua => ua.UserId == (long)userId)
+                // Get the user's most recent quiz (respecting filters)
+                var lastQuizQuery = db.UserAnswer
+                    .Include(ua => ua.Question)
+                        .ThenInclude(q => q.Test)
+                    .Where(ua => ua.UserId == (long)userId);
+
+                lastQuizQuery = ApplyFilters(lastQuizQuery, filter);
+
+                var lastQuizId = await lastQuizQuery
                     .OrderByDescending(ua => ua.Quiz.TimeStarted)
                     .Select(ua => ua.Quiz.QuizId)
                     .FirstOrDefaultAsync();
@@ -110,9 +118,9 @@ namespace SevenThree.Services
         /// <summary>
         /// Get questions the user has missed multiple times (weak areas)
         /// </summary>
-        public async Task<List<MissedQuestion>> GetWeakQuestionsAsync(ulong userId)
+        public async Task<List<MissedQuestion>> GetWeakQuestionsAsync(ulong userId, StudyFilter filter = null)
         {
-            var allMissed = await GetMissedQuestionsAsync(userId, StudyScope.All);
+            var allMissed = await GetMissedQuestionsAsync(userId, StudyScope.All, filter);
             return allMissed
                 .Where(q => q.TimesMissed >= StudyConstants.WEAK_THRESHOLD)
                 .OrderByDescending(q => q.TimesMissed)
@@ -122,14 +130,18 @@ namespace SevenThree.Services
         /// <summary>
         /// Get stats broken down by subelement
         /// </summary>
-        public async Task<UserStudyStats> GetUserStatsAsync(ulong userId)
+        public async Task<UserStudyStats> GetUserStatsAsync(ulong userId, StudyFilter filter = null)
         {
             using var db = _contextFactory.CreateDbContext();
 
-            var answers = await db.UserAnswer
+            var query = db.UserAnswer
                 .Include(ua => ua.Question)
                     .ThenInclude(q => q.Test)
-                .Where(ua => ua.UserId == (long)userId)
+                .Where(ua => ua.UserId == (long)userId);
+
+            query = ApplyFilters(query, filter);
+
+            var answers = await query
                 .Select(ua => new
                 {
                     ua.Question.SubelementName,
@@ -186,6 +198,23 @@ namespace SevenThree.Services
                     IsCorrect = a.IsAnswer
                 })
                 .ToListAsync();
+        }
+
+        private static IQueryable<UserAnswer> ApplyFilters(IQueryable<UserAnswer> query, StudyFilter filter)
+        {
+            if (filter == null || !filter.HasFilters)
+                return query;
+
+            if (filter.TestName != null)
+                query = query.Where(ua => ua.Question.Test.TestName == filter.TestName);
+
+            if (filter.TestId != null)
+                query = query.Where(ua => ua.Question.Test.TestId == filter.TestId.Value);
+
+            if (filter.SubelementName != null)
+                query = query.Where(ua => ua.Question.SubelementName == filter.SubelementName);
+
+            return query;
         }
 
         #region Session Management

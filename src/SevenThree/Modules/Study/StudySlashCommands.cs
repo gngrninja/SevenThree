@@ -26,18 +26,31 @@ namespace SevenThree.Modules.Study
 
         [SlashCommand("missed", "Review questions you answered incorrectly (flashcard mode)")]
         public async Task StudyMissed(
-            [Summary("scope", "Which quizzes to review")] StudyScope scope = StudyScope.Last)
+            [Summary("scope", "Which quizzes to review")] StudyScope scope = StudyScope.Last,
+            [Summary("type", "Filter by license type")]
+            [Choice("Technician", "tech")]
+            [Choice("General", "general")]
+            [Choice("Extra", "extra")]
+            string type = null,
+            [Summary("pool", "Filter by question pool")]
+            [Autocomplete(typeof(StudyPoolAutocompleteHandler))]
+            int? pool = null,
+            [Summary("subelement", "Filter by subelement/topic")]
+            [Autocomplete(typeof(StudySubelementAutocompleteHandler))]
+            string subelement = null)
         {
             await DeferAsync(ephemeral: true);
 
             try
             {
-                var missed = await _studyService.GetMissedQuestionsAsync(Context.User.Id, scope);
+                var filter = BuildFilter(type, pool, subelement);
+                var missed = await _studyService.GetMissedQuestionsAsync(Context.User.Id, scope, filter);
 
                 if (missed.Count == 0)
                 {
                     var scopeText = scope == StudyScope.Last ? "your last quiz" : "any quiz";
-                    await FollowupAsync($"No missed questions found in {scopeText}. Great job!", ephemeral: true);
+                    var filterText = filter?.HasFilters == true ? $" with filters ({filter.GetFilterDescription()})" : "";
+                    await FollowupAsync($"No missed questions found in {scopeText}{filterText}. Great job!", ephemeral: true);
                     return;
                 }
 
@@ -59,17 +72,30 @@ namespace SevenThree.Modules.Study
         }
 
         [SlashCommand("weak", "Study questions you've missed multiple times")]
-        public async Task StudyWeak()
+        public async Task StudyWeak(
+            [Summary("type", "Filter by license type")]
+            [Choice("Technician", "tech")]
+            [Choice("General", "general")]
+            [Choice("Extra", "extra")]
+            string type = null,
+            [Summary("pool", "Filter by question pool")]
+            [Autocomplete(typeof(StudyPoolAutocompleteHandler))]
+            int? pool = null,
+            [Summary("subelement", "Filter by subelement/topic")]
+            [Autocomplete(typeof(StudySubelementAutocompleteHandler))]
+            string subelement = null)
         {
             await DeferAsync(ephemeral: true);
 
             try
             {
-                var weak = await _studyService.GetWeakQuestionsAsync(Context.User.Id);
+                var filter = BuildFilter(type, pool, subelement);
+                var weak = await _studyService.GetWeakQuestionsAsync(Context.User.Id, filter);
 
                 if (weak.Count == 0)
                 {
-                    await FollowupAsync($"No weak areas found! You need to miss a question at least {StudyConstants.WEAK_THRESHOLD} times for it to appear here.", ephemeral: true);
+                    var filterText = filter?.HasFilters == true ? $" with filters ({filter.GetFilterDescription()})" : "";
+                    await FollowupAsync($"No weak areas found{filterText}! You need to miss a question at least {StudyConstants.WEAK_THRESHOLD} times for it to appear here.", ephemeral: true);
                     return;
                 }
 
@@ -95,21 +121,34 @@ namespace SevenThree.Modules.Study
         }
 
         [SlashCommand("stats", "View your performance statistics by topic")]
-        public async Task StudyStats()
+        public async Task StudyStats(
+            [Summary("type", "Filter by license type")]
+            [Choice("Technician", "tech")]
+            [Choice("General", "general")]
+            [Choice("Extra", "extra")]
+            string type = null,
+            [Summary("pool", "Filter by question pool")]
+            [Autocomplete(typeof(StudyPoolAutocompleteHandler))]
+            int? pool = null,
+            [Summary("subelement", "Filter by subelement/topic")]
+            [Autocomplete(typeof(StudySubelementAutocompleteHandler))]
+            string subelement = null)
         {
             await DeferAsync(ephemeral: true);
 
             try
             {
-                var stats = await _studyService.GetUserStatsAsync(Context.User.Id);
+                var filter = BuildFilter(type, pool, subelement);
+                var stats = await _studyService.GetUserStatsAsync(Context.User.Id, filter);
 
                 if (stats.TotalAnswered == 0)
                 {
-                    await FollowupAsync("No quiz history found. Take a practice exam first!", ephemeral: true);
+                    var filterText = filter?.HasFilters == true ? $" with filters ({filter.GetFilterDescription()})" : "";
+                    await FollowupAsync($"No quiz history found{filterText}. Take a practice exam first!", ephemeral: true);
                     return;
                 }
 
-                var embed = BuildStatsEmbed(stats);
+                var embed = BuildStatsEmbed(stats, filter);
                 await FollowupAsync(embed: embed.Build(), ephemeral: true);
             }
             catch (Exception ex)
@@ -121,18 +160,31 @@ namespace SevenThree.Modules.Study
 
         [SlashCommand("retry", "Re-take questions you missed (quiz mode)")]
         public async Task StudyRetry(
-            [Summary("scope", "Which quizzes to retry")] StudyScope scope = StudyScope.Last)
+            [Summary("scope", "Which quizzes to retry")] StudyScope scope = StudyScope.Last,
+            [Summary("type", "Filter by license type")]
+            [Choice("Technician", "tech")]
+            [Choice("General", "general")]
+            [Choice("Extra", "extra")]
+            string type = null,
+            [Summary("pool", "Filter by question pool")]
+            [Autocomplete(typeof(StudyPoolAutocompleteHandler))]
+            int? pool = null,
+            [Summary("subelement", "Filter by subelement/topic")]
+            [Autocomplete(typeof(StudySubelementAutocompleteHandler))]
+            string subelement = null)
         {
             await DeferAsync(ephemeral: true);
 
             try
             {
-                var missed = await _studyService.GetMissedQuestionsAsync(Context.User.Id, scope);
+                var filter = BuildFilter(type, pool, subelement);
+                var missed = await _studyService.GetMissedQuestionsAsync(Context.User.Id, scope, filter);
 
                 if (missed.Count == 0)
                 {
                     var scopeText = scope == StudyScope.Last ? "your last quiz" : "any quiz";
-                    await FollowupAsync($"No missed questions found in {scopeText}. Great job!", ephemeral: true);
+                    var filterText = filter?.HasFilters == true ? $" with filters ({filter.GetFilterDescription()})" : "";
+                    await FollowupAsync($"No missed questions found in {scopeText}{filterText}. Great job!", ephemeral: true);
                     return;
                 }
 
@@ -160,9 +212,26 @@ namespace SevenThree.Modules.Study
             }
         }
 
+        #region Helpers
+
+        private static StudyFilter BuildFilter(string type, int? pool, string subelement)
+        {
+            if (type == null && pool == null && subelement == null)
+                return null;
+
+            return new StudyFilter
+            {
+                TestName = type,
+                TestId = pool,
+                SubelementName = subelement
+            };
+        }
+
+        #endregion
+
         #region Embed Builders
 
-        private EmbedBuilder BuildStatsEmbed(UserStudyStats stats)
+        private EmbedBuilder BuildStatsEmbed(UserStudyStats stats, StudyFilter filter = null)
         {
             var embed = new EmbedBuilder();
             embed.Title = "Your Study Statistics";
@@ -170,7 +239,12 @@ namespace SevenThree.Modules.Study
             embed.ThumbnailUrl = QuizConstants.BOT_THUMBNAIL_URL;
 
             var passEmoji = stats.OverallPercent >= 74 ? "✅" : "📚";
-            embed.Description = $"{passEmoji} **Overall: {stats.OverallPercent}%** ({stats.TotalCorrect}/{stats.TotalAnswered} correct)";
+            var description = $"{passEmoji} **Overall: {stats.OverallPercent}%** ({stats.TotalCorrect}/{stats.TotalAnswered} correct)";
+
+            if (filter?.HasFilters == true)
+                description += $"\nFiltered by: {filter.GetFilterDescription()}";
+
+            embed.Description = description;
 
             // Group by test type
             var byTest = stats.SubelementStats.GroupBy(s => s.TestName?.ToUpper() ?? "UNKNOWN");
