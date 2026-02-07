@@ -28,7 +28,6 @@ namespace SevenThree.Modules
             new("callsign", "Callsign", "Associate your callsign with your Discord account", "📛"),
             new("conditions", "Band Conditions", "Check current band conditions", "🌐"),
             new("settings", "Server Settings", "Server-specific quiz settings", "⚙️"),
-            new("admin", "Admin", "Bot owner commands", "🔒"),
             new("other", "Other", "Other commands", "❓"),
         };
 
@@ -39,11 +38,10 @@ namespace SevenThree.Modules
 
             try
             {
-                var isOwner = await IsOwnerAsync();
-                var commands = GetAvailableCommands(_interactions, isOwner);
+                var commands = GetAvailableCommands(_interactions);
 
                 var embed = BuildWelcomeEmbed();
-                var menu = BuildCategorySelectMenu(commands, isOwner);
+                var menu = BuildCategorySelectMenu(commands);
 
                 await FollowupAsync(embed: embed.Build(), components: menu, ephemeral: true);
             }
@@ -99,7 +97,7 @@ namespace SevenThree.Modules
             return embed;
         }
 
-        public static MessageComponent BuildCategorySelectMenu(List<CommandInfo> commands, bool isOwner)
+        public static MessageComponent BuildCategorySelectMenu(List<CommandInfo> commands)
         {
             var builder = new ComponentBuilder();
             var selectMenu = new SelectMenuBuilder()
@@ -112,8 +110,6 @@ namespace SevenThree.Modules
 
             foreach (var catDef in Categories)
             {
-                if (catDef.Id == "admin" && !isOwner) continue;
-
                 var categoryName = CatIdToCategory(catDef.Id);
                 var count = commands.Count(c => CategorizeCommand(c.Name, c.ModuleName) == categoryName);
                 if (count == 0) continue;
@@ -134,7 +130,7 @@ namespace SevenThree.Modules
 
         #region Command Scanning
 
-        public static List<CommandInfo> GetAvailableCommands(InteractionService interactions, bool includeOwnerOnly)
+        public static List<CommandInfo> GetAvailableCommands(InteractionService interactions)
         {
             var result = new List<CommandInfo>();
 
@@ -148,7 +144,7 @@ namespace SevenThree.Modules
                     var isOwnerOnly = cmd.Preconditions.Any(p => p is RequireOwnerAttribute) ||
                                       module.Preconditions.Any(p => p is RequireOwnerAttribute);
 
-                    if (isOwnerOnly && !includeOwnerOnly)
+                    if (isOwnerOnly)
                         continue;
 
                     result.Add(new CommandInfo
@@ -157,7 +153,6 @@ namespace SevenThree.Modules
                         Description = cmd.Description,
                         ModuleName = groupPrefix ?? module.Name,
                         GroupPrefix = groupPrefix,
-                        IsOwnerOnly = isOwnerOnly,
                     });
                 }
             }
@@ -233,38 +228,12 @@ namespace SevenThree.Modules
 
         #endregion
 
-        #region Helpers
-
-        private async Task<bool> IsOwnerAsync()
-        {
-            try
-            {
-                var appInfo = await Context.Client.GetApplicationInfoAsync();
-                if (appInfo.Owner?.Id == Context.User.Id)
-                    return true;
-
-                if (appInfo.Team != null)
-                {
-                    return appInfo.Team.TeamMembers.Any(m => m.User.Id == Context.User.Id);
-                }
-
-                return false;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        #endregion
-
         public class CommandInfo
         {
             public string Name { get; set; }
             public string Description { get; set; }
             public string ModuleName { get; set; }
             public string GroupPrefix { get; set; }
-            public bool IsOwnerOnly { get; set; }
         }
 
         private record CategoryDefinition(string Id, string Name, string Description, string Emoji);

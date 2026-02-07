@@ -6,23 +6,21 @@ using Discord.Interactions;
 using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
 
+
 namespace SevenThree.Modules.Help
 {
     public class HelpSelectMenuHandler
     {
         private readonly InteractionService _interactions;
-        private readonly DiscordSocketClient _client;
         private readonly ILogger<HelpSelectMenuHandler> _logger;
 
         public const string SELECT_MENU_ID = "help_category_select";
 
         public HelpSelectMenuHandler(
             InteractionService interactions,
-            DiscordSocketClient client,
             ILogger<HelpSelectMenuHandler> logger)
         {
             _interactions = interactions;
-            _client = client;
             _logger = logger;
         }
 
@@ -31,13 +29,12 @@ namespace SevenThree.Modules.Help
             try
             {
                 var categoryId = component.Data.Values.First();
-                var isOwner = await IsOwnerAsync(component.User.Id);
-                var commands = HelpSlashCommands.GetAvailableCommands(_interactions, isOwner);
+                var commands = HelpSlashCommands.GetAvailableCommands(_interactions);
 
                 if (categoryId == "welcome")
                 {
                     var welcomeEmbed = HelpSlashCommands.BuildWelcomeEmbed();
-                    var menu = HelpSlashCommands.BuildCategorySelectMenu(commands, isOwner);
+                    var menu = HelpSlashCommands.BuildCategorySelectMenu(commands);
 
                     await component.UpdateAsync(m =>
                     {
@@ -48,7 +45,7 @@ namespace SevenThree.Modules.Help
                 }
 
                 var embed = HelpSlashCommands.BuildCategoryEmbed(categoryId, commands);
-                var selectMenu = HelpSlashCommands.BuildCategorySelectMenu(commands, isOwner);
+                var selectMenu = HelpSlashCommands.BuildCategorySelectMenu(commands);
 
                 await component.UpdateAsync(m =>
                 {
@@ -70,21 +67,5 @@ namespace SevenThree.Modules.Help
             }
         }
 
-        private async Task<bool> IsOwnerAsync(ulong userId)
-        {
-            try
-            {
-                var appInfo = await _client.GetApplicationInfoAsync();
-                if (appInfo.Owner?.Id == userId)
-                    return true;
-                if (appInfo.Team != null)
-                    return appInfo.Team.TeamMembers.Any(m => m.User.Id == userId);
-                return false;
-            }
-            catch
-            {
-                return false;
-            }
-        }
     }
 }
