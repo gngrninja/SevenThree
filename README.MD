@@ -86,16 +86,6 @@ Real-time propagation and spot data from PSKReporter, with paginated results.
 |---|---|
 | `/help` | Interactive help with a category dropdown menu |
 
-### Server Settings
-
-Server administrators can configure quiz behavior per channel.
-
-| Command | Description |
-|---|---|
-| `/quizsettings setchannel <license>` | Restrict a channel to a specific license type |
-| `/quizsettings unsetchannel` | Remove channel restriction |
-| `/quizsettings clearafter` | Toggle clearing messages after a quiz ends |
-
 ## Issues / Feedback
 
 Feel free to open an issue against this repository, or ask on the Discord server: https://discord.gg/EhvxYbx
