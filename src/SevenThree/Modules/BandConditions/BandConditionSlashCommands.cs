@@ -17,9 +17,10 @@ namespace SevenThree.Modules.BandConditions
         }
 
         [SlashCommand("conditions", "Get current ham radio band conditions")]
-        public async Task GetConditions()
+        public async Task GetConditions(
+            [Summary("private", "Send the result only to you")] bool isPrivate = false)
         {
-            await DeferAsync(ephemeral: true);
+            await DeferAsync(ephemeral: isPrivate);
 
             var conds = _services.GetRequiredService<BandConditions>();
             var result = await conds.GetConditionsHamQsl();
@@ -36,11 +37,11 @@ namespace SevenThree.Modules.BandConditions
                 };
                 embed.ImageUrl = $"attachment://{fileName}";
 
-                await FollowupWithFileAsync(result, fileName, embed: embed.Build(), ephemeral: true);
+                await FollowupWithFileAsync(result, fileName, embed: embed.Build(), ephemeral: isPrivate);
             }
             else
             {
-                await FollowupAsync("There was an error getting the conditions, please try again later.", ephemeral: true);
+                await FollowupAsync("There was an error getting the conditions, please try again later.", ephemeral: isPrivate);
             }
         }
     }

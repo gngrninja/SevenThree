@@ -22,15 +22,16 @@ namespace SevenThree.Modules
 
         [SlashCommand("lookup", "Look up a ham radio callsign on QRZ.com")]
         public async Task LookupCall(
-            [Summary("callsign", "The callsign to look up")] string callsign)
+            [Summary("callsign", "The callsign to look up")] string callsign,
+            [Summary("private", "Send the result only to you")] bool isPrivate = false)
         {
-            await DeferAsync(ephemeral: true);
+            await DeferAsync(ephemeral: isPrivate);
 
             try
             {
                 if (!_qrzApi.IsConfigured)
                 {
-                    await FollowupAsync("QRZ API is not configured. Please set QRZ credentials in environment variables.", ephemeral: true);
+                    await FollowupAsync("QRZ API is not configured. Please set QRZ credentials in environment variables.", ephemeral: isPrivate);
                     return;
                 }
 
@@ -61,7 +62,7 @@ namespace SevenThree.Modules
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error looking up callsign {Callsign}", callsign);
-                await FollowupAsync("An error occurred while looking up the callsign.", ephemeral: true);
+                await FollowupAsync("An error occurred while looking up the callsign.", ephemeral: isPrivate);
             }
         }
 
