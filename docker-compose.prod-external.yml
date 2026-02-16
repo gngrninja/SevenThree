@@ -1,0 +1,12 @@
+services:
+  bot:
+    build: .
+    container_name: seventhree-bot
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      - DOTNET_ENVIRONMENT=production
+    volumes:
+      - ./logs:/app/logs
+      - ./src/SevenThree/import:/app/import

@@ -3,10 +3,11 @@
 # Slash commands register globally (no DevGuildId)
 #
 # Usage:
-#   ./run-bot-prod.sh          # Start/restart the production environment
-#   ./run-bot-prod.sh --build  # Force rebuild the bot image
-#   ./run-bot-prod.sh --logs   # Show live logs
-#   ./run-bot-prod.sh --stop   # Stop the production environment
+#   ./run-bot-prod.sh                # Start/restart the production environment
+#   ./run-bot-prod.sh --build        # Force rebuild the bot image
+#   ./run-bot-prod.sh --logs         # Show live logs
+#   ./run-bot-prod.sh --stop         # Stop the production environment
+#   ./run-bot-prod.sh --external-db  # Use external PostgreSQL (no local postgres container)
 
 set -e
 
@@ -17,6 +18,7 @@ cd "$PROJECT_ROOT"
 BUILD_FLAG=""
 SHOW_LOGS=false
 STOP_ONLY=false
+EXTERNAL_DB=false
 
 for arg in "$@"; do
     case $arg in
@@ -29,8 +31,18 @@ for arg in "$@"; do
         --stop)
             STOP_ONLY=true
             ;;
+        --external-db)
+            EXTERNAL_DB=true
+            ;;
     esac
 done
+
+# Set compose file based on mode
+if [ "$EXTERNAL_DB" = true ]; then
+    COMPOSE_CMD="docker compose -f docker-compose.prod-external.yml"
+else
+    COMPOSE_CMD="docker compose"
+fi
 
 # Check if .env.production exists
 if [ ! -f "$PROJECT_ROOT/.env.production" ]; then
@@ -64,7 +76,7 @@ export $(grep -v '^#' .env.production | grep -v '^$' | xargs)
 # Handle stop command
 if [ "$STOP_ONLY" = true ]; then
     echo "Stopping production environment..."
-    docker compose down
+    $COMPOSE_CMD down
     echo "Production environment stopped."
     exit 0
 fi
@@ -79,23 +91,30 @@ echo ""
 
 # Stop existing containers
 echo "Stopping existing containers..."
-docker compose down 2>/dev/null || true
+$COMPOSE_CMD down 2>/dev/null || true
 
-# Step 1: Start ONLY the database first
-echo "Starting database..."
-docker compose up -d postgres
+if [ "$EXTERNAL_DB" = true ]; then
+    # External DB mode: start bot only, no local postgres
+    echo "Using external database..."
+    echo "Starting bot container..."
+    $COMPOSE_CMD up -d $BUILD_FLAG bot
+else
+    # Step 1: Start ONLY the database first
+    echo "Starting database..."
+    $COMPOSE_CMD up -d postgres
 
-# Step 2: Wait for database to be healthy
-echo "Waiting for database to be healthy..."
-until docker compose exec -T postgres pg_isready -U seventhree -d seventhree > /dev/null 2>&1; do
-    echo "  Database not ready yet, waiting..."
-    sleep 2
-done
-echo "Database is ready!"
+    # Step 2: Wait for database to be healthy
+    echo "Waiting for database to be healthy..."
+    until $COMPOSE_CMD exec -T postgres pg_isready -U seventhree -d seventhree > /dev/null 2>&1; do
+        echo "  Database not ready yet, waiting..."
+        sleep 2
+    done
+    echo "Database is ready!"
 
-# Step 3: Start the bot container (migrations applied automatically on startup)
-echo "Starting bot container..."
-docker compose up -d $BUILD_FLAG bot
+    # Step 3: Start the bot container (migrations applied automatically on startup)
+    echo "Starting bot container..."
+    $COMPOSE_CMD up -d $BUILD_FLAG bot
+fi
 
 echo ""
 echo "=========================================="
@@ -104,12 +123,21 @@ echo "=========================================="
 echo ""
 echo "Services:"
 echo "  - Bot:      Running in Docker"
-echo "  - Database: PostgreSQL"
+if [ "$EXTERNAL_DB" = true ]; then
+    echo "  - Database: External"
+else
+    echo "  - Database: PostgreSQL"
+fi
 echo ""
 echo "Commands:"
-echo "  View logs:  docker compose logs -f bot"
-echo "  Stop:       ./run-bot-prod.sh --stop"
-echo "  Rebuild:    ./run-bot-prod.sh --build"
+echo "  View logs:  $COMPOSE_CMD logs -f bot"
+if [ "$EXTERNAL_DB" = true ]; then
+    echo "  Stop:       ./run-bot-prod.sh --stop --external-db"
+    echo "  Rebuild:    ./run-bot-prod.sh --build --external-db"
+else
+    echo "  Stop:       ./run-bot-prod.sh --stop"
+    echo "  Rebuild:    ./run-bot-prod.sh --build"
+fi
 echo ""
 echo "Note: Global slash commands can take up to 1 hour to propagate."
 echo ""
@@ -117,5 +145,5 @@ echo ""
 # Show logs if requested
 if [ "$SHOW_LOGS" = true ]; then
     echo "Showing logs (Ctrl+C to exit)..."
-    docker compose logs -f bot
+    $COMPOSE_CMD logs -f bot
 fi
