@@ -123,7 +123,6 @@ namespace SevenThree
                     | GatewayIntents.GuildMessageReactions
                     | GatewayIntents.DirectMessages
                     | GatewayIntents.DirectMessageReactions
-                    | GatewayIntents.MessageContent
             };
 
             var interactionConfig = new InteractionServiceConfig
