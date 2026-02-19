@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SevenThree.Database;
 using SevenThree.Models;
+using SevenThree.Preconditions;
 
 namespace SevenThree.Modules
 {
@@ -36,7 +37,7 @@ namespace SevenThree.Modules
         }
 
         [SlashCommand("playing", "Set the bot's playing status (bot owner only)")]
-        [RequireOwner]
+        [RequireTeamOrOwner]
         public async Task ChangePlaying(
             [Summary("status", "The status message to display")] string status)
         {
@@ -52,7 +53,7 @@ namespace SevenThree.Modules
         }
 
         [SlashCommand("import", "Import question pool(s) from JSON (bot owner only)")]
-        [RequireOwner]
+        [RequireTeamOrOwner]
         public async Task ImportQuestions(
             [Summary("target", "License class to import (or All for all classes)")] ImportTarget target)
         {

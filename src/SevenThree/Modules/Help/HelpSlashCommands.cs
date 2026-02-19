@@ -7,6 +7,7 @@ using Discord.Interactions;
 using Microsoft.Extensions.DependencyInjection;
 using SevenThree.Constants;
 using SevenThree.Modules.Help;
+using SevenThree.Preconditions;
 
 namespace SevenThree.Modules
 {
@@ -141,8 +142,8 @@ namespace SevenThree.Modules
 
                 foreach (var cmd in module.SlashCommands)
                 {
-                    var isOwnerOnly = cmd.Preconditions.Any(p => p is RequireOwnerAttribute) ||
-                                      module.Preconditions.Any(p => p is RequireOwnerAttribute);
+                    var isOwnerOnly = cmd.Preconditions.Any(p => p is RequireOwnerAttribute or RequireTeamOrOwnerAttribute) ||
+                                      module.Preconditions.Any(p => p is RequireOwnerAttribute or RequireTeamOrOwnerAttribute);
 
                     if (isOwnerOnly)
                         continue;
