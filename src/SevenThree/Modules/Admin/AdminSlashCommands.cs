@@ -73,14 +73,26 @@ namespace SevenThree.Modules
                     var result = await ImportLicenseType(target.ToString().ToLower());
                     await FollowupAsync(result);
                 }
-
-                // Refresh the in-memory pool cache so /quiz autocomplete sees new pools immediately.
-                await _hamTestService.RefreshPoolCacheAsync();
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error importing questions");
                 await FollowupAsync($"Error importing: {ex.Message}");
+            }
+            finally
+            {
+                // Refresh the in-memory pool cache so /quiz autocomplete sees new pools immediately.
+                // Runs even after a failed/partial import (no transaction wraps the import, so rows
+                // may already be in the DB) and logs its own failures instead of sending the user an
+                // error after a successful import.
+                try
+                {
+                    await _hamTestService.RefreshPoolCacheAsync();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Pool cache refresh after import failed; /quiz autocomplete may be stale until the next import or restart");
+                }
             }
         }
 

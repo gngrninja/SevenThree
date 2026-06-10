@@ -66,7 +66,8 @@ namespace SevenThree.Services
             _interactions.SlashCommandExecuted += SlashCommandExecutedAsync;
         }
 
-        public async Task RegisterCommandsAsync()
+        /// <returns>True if registration succeeded; false on failure (caller may retry on a later Ready).</returns>
+        public async Task<bool> RegisterCommandsAsync()
         {
             try
             {
@@ -84,10 +85,13 @@ namespace SevenThree.Services
                     await _interactions.RegisterCommandsGloballyAsync();
                     _logger.LogInformation("Slash commands registered globally (may take up to 1 hour to propagate)");
                 }
+
+                return true;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to register slash commands");
+                return false;
             }
         }
 
@@ -129,20 +133,37 @@ namespace SevenThree.Services
             }
         }
 
-        private Task SlashCommandExecutedAsync(SlashCommandInfo command, IInteractionContext context, IResult result)
+        private async Task SlashCommandExecutedAsync(SlashCommandInfo command, IInteractionContext context, IResult result)
         {
             if (!result.IsSuccess)
             {
                 _logger.LogWarning("Slash command {CommandName} failed: {Error} - {ErrorReason}",
                     command.Name, result.Error, result.ErrorReason);
+
+                // With RunMode.Async, ExecuteCommandAsync has already returned success by the time
+                // the command actually runs, so execution failures surface ONLY here — without this
+                // reply the user is left on a hung "thinking..." state.
+                try
+                {
+                    if (context.Interaction.HasResponded)
+                    {
+                        await context.Interaction.FollowupAsync($"Error: {result.ErrorReason}", ephemeral: true);
+                    }
+                    else
+                    {
+                        await context.Interaction.RespondAsync($"Error: {result.ErrorReason}", ephemeral: true);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Could not report command failure to the user (interaction likely expired)");
+                }
             }
             else
             {
                 _logger.LogInformation("Slash command {CommandName} executed by {Username}",
                     command.Name, context.User.Username);
             }
-
-            return Task.CompletedTask;
         }
 
         private async Task HandleButtonExecutedAsync(SocketMessageComponent component)

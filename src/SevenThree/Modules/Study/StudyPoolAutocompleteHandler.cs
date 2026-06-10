@@ -30,18 +30,7 @@ namespace SevenThree.Modules.Study
             var typeOption = autocomplete.Data.Options
                 .FirstOrDefault(o => o.Name == "type" && !o.Focused)?.Value?.ToString();
 
-            var query = db.UserAnswer
-                .Include(ua => ua.Question)
-                    .ThenInclude(q => q.Test)
-                .Where(ua => ua.UserId == userId);
-
-            if (!string.IsNullOrEmpty(typeOption))
-                query = query.Where(ua => ua.Question.Test.TestName == typeOption);
-
-            var pools = await query
-                .Select(ua => ua.Question.Test)
-                .Distinct()
-                .ToListAsync();
+            var pools = await UserPoolsQuery(db, userId, typeOption).ToListAsync();
 
             var today = DateTime.UtcNow.Date;
             var userInput = (autocomplete.Data.Current.Value?.ToString() ?? "").ToLower();
@@ -60,6 +49,26 @@ namespace SevenThree.Modules.Study
                 .ToList();
 
             return AutocompletionResult.FromSuccess(results);
+        }
+
+        /// <summary>
+        /// The per-keystroke query this handler runs. Shared with HamTestService's startup warm-up
+        /// so the warmed EF query plan is the exact shape used here (autocomplete cannot defer and
+        /// must answer within Discord's 3-second window).
+        /// </summary>
+        internal static IQueryable<HamTest> UserPoolsQuery(SevenThreeContext db, long userId, string testName = null)
+        {
+            var query = db.UserAnswer
+                .Include(ua => ua.Question)
+                    .ThenInclude(q => q.Test)
+                .Where(ua => ua.UserId == userId);
+
+            if (!string.IsNullOrEmpty(testName))
+                query = query.Where(ua => ua.Question.Test.TestName == testName);
+
+            return query
+                .Select(ua => ua.Question.Test)
+                .Distinct();
         }
 
         private static string GetPoolStatus(HamTest pool, DateTime today)

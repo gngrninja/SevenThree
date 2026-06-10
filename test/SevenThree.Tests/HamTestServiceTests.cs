@@ -163,5 +163,98 @@ namespace SevenThree.Tests
         }
 
         #endregion
+
+        #region Pool Cache Tests
+
+        private async Task SeedPoolsAsync()
+        {
+            using var context = new SevenThreeContext(_dbOptions);
+            context.HamTest.AddRange(
+                new HamTest
+                {
+                    TestId = 1,
+                    TestName = "tech",
+                    TestDescription = "Technician",
+                    FromDate = new DateTime(2022, 7, 1),
+                    ToDate = new DateTime(2026, 6, 30)
+                },
+                new HamTest
+                {
+                    TestId = 2,
+                    TestName = "tech",
+                    TestDescription = "Technician (next cycle)",
+                    FromDate = new DateTime(2026, 7, 1),
+                    ToDate = new DateTime(2030, 6, 30)
+                },
+                new HamTest
+                {
+                    TestId = 3,
+                    TestName = "general",
+                    TestDescription = "General",
+                    FromDate = new DateTime(2023, 7, 1),
+                    ToDate = new DateTime(2027, 6, 30)
+                });
+            await context.SaveChangesAsync();
+        }
+
+        [Fact]
+        public void GetPools_BeforeRefresh_ReturnsEmpty()
+        {
+            // arrange
+            var service = CreateService();
+
+            // assert
+            Assert.Empty(service.GetPools("tech"));
+        }
+
+        [Fact]
+        public async Task RefreshPoolCacheAsync_LoadsPoolsFilteredByTestName()
+        {
+            // arrange
+            await SeedPoolsAsync();
+            var service = CreateService();
+
+            // act
+            await service.RefreshPoolCacheAsync();
+
+            // assert
+            var techPools = service.GetPools("tech");
+            Assert.Equal(2, techPools.Count);
+            Assert.All(techPools, p => Assert.Equal("tech", p.TestName));
+            Assert.Single(service.GetPools("general"));
+            Assert.Empty(service.GetPools("extra"));
+        }
+
+        [Fact]
+        public async Task RefreshPoolCacheAsync_PicksUpNewlyImportedPools()
+        {
+            // arrange
+            var service = CreateService();
+            await service.RefreshPoolCacheAsync();
+            Assert.Empty(service.GetPools("general"));
+
+            // act - simulate /import writing a new pool, then the post-import refresh
+            await SeedPoolsAsync();
+            await service.RefreshPoolCacheAsync();
+
+            // assert
+            Assert.Single(service.GetPools("general"));
+        }
+
+        [Fact]
+        public async Task InitializeAsync_PopulatesPoolCache()
+        {
+            // arrange
+            await SeedPoolsAsync();
+            var service = CreateService();
+
+            // act
+            await service.InitializeAsync();
+
+            // assert
+            Assert.Equal(2, service.GetPools("tech").Count);
+        }
+
+        #endregion
     }
 }

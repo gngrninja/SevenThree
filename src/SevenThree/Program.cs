@@ -3,6 +3,7 @@ using System.IO;
 using Discord;
 using Discord.Interactions;
 using Discord.WebSocket;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -86,17 +87,28 @@ namespace SevenThree
                     var interactionHandler = services.GetRequiredService<InteractionHandler>();
                     await interactionHandler.InitializeAsync();
 
-                    // Register slash commands on the FIRST ready only. The Ready event fires on
-                    // every gateway reconnect (Discord cycles connections ~daily); re-registering
-                    // global commands each time is needless REST churn + up-to-1h propagation, and
-                    // commands persist server-side across reconnects. Once per process is enough.
-                    var commandsRegistered = false;
-                    client.Ready += async () =>
+                    // Register slash commands once per process. The Ready event fires on every
+                    // gateway reconnect (Discord cycles connections ~daily); re-registering global
+                    // commands each time is needless REST churn + up-to-1h propagation, and commands
+                    // persist server-side across reconnects. Registration runs on the thread pool so
+                    // the Ready handler never blocks the gateway task, and the guard resets on
+                    // failure so the next Ready (reconnect) retries instead of giving up for good.
+                    var commandsRegistered = 0;
+                    client.Ready += () =>
                     {
-                        if (commandsRegistered) return;
-                        commandsRegistered = true;
-                        Log.Information("Discord client ready, registering slash commands...");
-                        await interactionHandler.RegisterCommandsAsync();
+                        if (Interlocked.CompareExchange(ref commandsRegistered, 1, 0) == 0)
+                        {
+                            _ = Task.Run(async () =>
+                            {
+                                Log.Information("Discord client ready, registering slash commands...");
+                                var success = await interactionHandler.RegisterCommandsAsync();
+                                if (!success)
+                                {
+                                    Interlocked.Exchange(ref commandsRegistered, 0);
+                                }
+                            });
+                        }
+                        return Task.CompletedTask;
                     };
 
                     Log.Information("Logging in to Discord...");

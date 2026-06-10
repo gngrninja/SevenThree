@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using SevenThree.Modules;
+using SevenThree.Modules.Study;
 using System.Collections.Concurrent;
 using SevenThree.Database;
 using System.Linq;
@@ -66,9 +67,6 @@ namespace SevenThree.Services
             _logger.LogDebug("Pool cache refreshed: {Count} pools", _pools.Count);
         }
 
-        /// <summary>All cached question pools.</summary>
-        public IReadOnlyList<HamTest> GetPools() => _pools;
-
         /// <summary>Cached pools for a license type (tech/general/extra).</summary>
         public IReadOnlyList<HamTest> GetPools(string testName) =>
             _pools.Where(p => p.TestName == testName).ToList();
@@ -82,8 +80,12 @@ namespace SevenThree.Services
             try
             {
                 using var db = _contextFactory.CreateDbContext();
-                // Warm the UserAnswer query shape used by /study autocomplete (user-specific, not cached).
-                await db.UserAnswer.AsNoTracking().Select(u => u.UserId).Take(1).ToListAsync();
+                // Warm the exact per-keystroke query /study pool autocomplete runs (user-specific,
+                // so it can't be cached like the /quiz pools). The query definition is shared with
+                // the handler, so the warmed plan can't drift from the real shape. User 0 never
+                // exists, so this returns no rows. The subelement autocomplete's plan still compiles
+                // on its first use, but by then the connection pool and EF model are warm.
+                await StudyPoolAutocompleteHandler.UserPoolsQuery(db, userId: 0).ToListAsync();
             }
             catch (Exception ex)
             {
