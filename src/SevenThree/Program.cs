@@ -86,9 +86,15 @@ namespace SevenThree
                     var interactionHandler = services.GetRequiredService<InteractionHandler>();
                     await interactionHandler.InitializeAsync();
 
-                    // Register slash commands when ready
+                    // Register slash commands on the FIRST ready only. The Ready event fires on
+                    // every gateway reconnect (Discord cycles connections ~daily); re-registering
+                    // global commands each time is needless REST churn + up-to-1h propagation, and
+                    // commands persist server-side across reconnects. Once per process is enough.
+                    var commandsRegistered = false;
                     client.Ready += async () =>
                     {
+                        if (commandsRegistered) return;
+                        commandsRegistered = true;
                         Log.Information("Discord client ready, registering slash commands...");
                         await interactionHandler.RegisterCommandsAsync();
                     };

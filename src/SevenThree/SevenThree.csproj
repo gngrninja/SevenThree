@@ -5,6 +5,10 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>disable</Nullable>
+    <!-- Precompile to native (ReadyToRun) to reduce first-use JIT latency / cold-start.
+         No-op unless published with a RID (the Dockerfile passes -r linux-x64); local
+         `dotnet run`/`dotnet test` are unaffected. -->
+    <PublishReadyToRun>true</PublishReadyToRun>
   </PropertyGroup>
 
   <ItemGroup>

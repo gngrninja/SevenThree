@@ -12,6 +12,7 @@ using Microsoft.Extensions.Logging;
 using SevenThree.Database;
 using SevenThree.Models;
 using SevenThree.Preconditions;
+using SevenThree.Services;
 
 namespace SevenThree.Modules
 {
@@ -28,12 +29,14 @@ namespace SevenThree.Modules
         private readonly DiscordSocketClient _client;
         private readonly ILogger<AdminSlashCommands> _logger;
         private readonly IDbContextFactory<SevenThreeContext> _contextFactory;
+        private readonly HamTestService _hamTestService;
 
         public AdminSlashCommands(IServiceProvider services)
         {
             _client = services.GetRequiredService<DiscordSocketClient>();
             _logger = services.GetRequiredService<ILogger<AdminSlashCommands>>();
             _contextFactory = services.GetRequiredService<IDbContextFactory<SevenThreeContext>>();
+            _hamTestService = services.GetRequiredService<HamTestService>();
         }
 
         [SlashCommand("playing", "Set the bot's playing status (bot owner only)")]
@@ -70,6 +73,9 @@ namespace SevenThree.Modules
                     var result = await ImportLicenseType(target.ToString().ToLower());
                     await FollowupAsync(result);
                 }
+
+                // Refresh the in-memory pool cache so /quiz autocomplete sees new pools immediately.
+                await _hamTestService.RefreshPoolCacheAsync();
             }
             catch (Exception ex)
             {
